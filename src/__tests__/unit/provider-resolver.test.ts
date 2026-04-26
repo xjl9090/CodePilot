@@ -1106,6 +1106,343 @@ const { createProvider, deleteProvider } = require('../../lib/db');
 });
 
 // ────────────────────────────────────────────────────────────────
+// Hidden role models must NOT leak into Claude Code subprocess env
+// ────────────────────────────────────────────────────────────────
+//
+// Regression coverage for the P2 finding (2026-04-26): the resolver's
+// `requestedModel` chain skips hidden role defaults via `dbHiddenIds`,
+// but `roleModels` itself was untouched. `toClaudeCodeEnv()` then read
+// the original (still-hidden) value out of `roleModels.default` and
+// wrote it to `ANTHROPIC_MODEL` for the SDK subprocess — defeating
+// the user's intent to hide the model.
+//
+// `buildResolution()` now strips every role slot whose value is in
+// `dbHiddenIds` and fills `roleModels.default` from the picked fallback
+// upstream so `ANTHROPIC_MODEL` stays meaningful.
+
+describe('Hidden role models do not leak into Claude Code env', () => {
+  it('hidden role default is stripped + ANTHROPIC_MODEL takes picked fallback', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createProvider, deleteProvider, upsertProviderModel } = require('../../lib/db');
+    const provider = createProvider({
+      name: '__test_hidden_role_default__',
+      provider_type: 'anthropic',
+      base_url: 'https://api.anthropic.com',
+      api_key: 'test-key',
+      // Default role points at the model we are about to hide.
+      role_models_json: JSON.stringify({ default: 'hidden-default-model' }),
+    });
+    try {
+      // Materialize provider_models rows: hide the role default, leave a
+      // visible model around so the resolver's fallback can pick it.
+      upsertProviderModel({
+        provider_id: provider.id,
+        model_id: 'hidden-default-model',
+        upstream_model_id: 'hidden-default-model',
+        display_name: 'Hidden Default',
+        enabled: 0,
+        source: 'manual',
+        user_edited: 1,
+        sort_order: 0,
+      });
+      upsertProviderModel({
+        provider_id: provider.id,
+        model_id: 'visible-fallback',
+        upstream_model_id: 'visible-fallback',
+        display_name: 'Visible Fallback',
+        enabled: 1,
+        source: 'manual',
+        user_edited: 1,
+        sort_order: 1,
+      });
+
+      const resolved = resolveProvider({ providerId: provider.id });
+
+      assert.equal(resolved.model, 'visible-fallback',
+        'resolver picks the visible model as fallback');
+      assert.notEqual(resolved.roleModels.default, 'hidden-default-model',
+        'hidden default must be stripped from roleModels');
+      assert.equal(resolved.roleModels.default, 'visible-fallback',
+        'roleModels.default is filled from the picked upstream');
+
+      const env = toClaudeCodeEnv({}, resolved);
+      assert.notEqual(env.ANTHROPIC_MODEL, 'hidden-default-model',
+        'ANTHROPIC_MODEL must NOT carry the hidden role default');
+      assert.equal(env.ANTHROPIC_MODEL, 'visible-fallback',
+        'ANTHROPIC_MODEL takes the picked fallback so the SDK subprocess agrees with the chat picker');
+    } finally {
+      deleteProvider(provider.id);
+    }
+  });
+
+  it('hidden sonnet/haiku/opus role slots are stripped from ANTHROPIC_DEFAULT_*_MODEL', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createProvider, deleteProvider, upsertProviderModel } = require('../../lib/db');
+    const provider = createProvider({
+      name: '__test_hidden_role_aliases__',
+      provider_type: 'anthropic',
+      base_url: 'https://api.anthropic.com',
+      api_key: 'test-key',
+      role_models_json: JSON.stringify({
+        default: 'visible-default',
+        sonnet: 'hidden-sonnet',
+        haiku: 'hidden-haiku',
+        opus: 'visible-opus',
+      }),
+    });
+    try {
+      upsertProviderModel({
+        provider_id: provider.id, model_id: 'visible-default',
+        upstream_model_id: 'visible-default', display_name: 'Visible',
+        enabled: 1, source: 'manual', user_edited: 1, sort_order: 0,
+      });
+      upsertProviderModel({
+        provider_id: provider.id, model_id: 'hidden-sonnet',
+        upstream_model_id: 'hidden-sonnet', display_name: 'Hidden Sonnet',
+        enabled: 0, source: 'manual', user_edited: 1, sort_order: 1,
+      });
+      upsertProviderModel({
+        provider_id: provider.id, model_id: 'hidden-haiku',
+        upstream_model_id: 'hidden-haiku', display_name: 'Hidden Haiku',
+        enabled: 0, source: 'manual', user_edited: 1, sort_order: 2,
+      });
+      upsertProviderModel({
+        provider_id: provider.id, model_id: 'visible-opus',
+        upstream_model_id: 'visible-opus', display_name: 'Visible Opus',
+        enabled: 1, source: 'manual', user_edited: 1, sort_order: 3,
+      });
+
+      const resolved = resolveProvider({ providerId: provider.id });
+
+      assert.equal(resolved.roleModels.sonnet, undefined,
+        'hidden sonnet slot stripped');
+      assert.equal(resolved.roleModels.haiku, undefined,
+        'hidden haiku slot stripped');
+      assert.equal(resolved.roleModels.opus, 'visible-opus',
+        'visible opus slot preserved');
+      assert.equal(resolved.roleModels.default, 'visible-default',
+        'visible default slot preserved (no fill needed)');
+
+      const env = toClaudeCodeEnv({}, resolved);
+      assert.equal(env.ANTHROPIC_DEFAULT_SONNET_MODEL, undefined,
+        'no ANTHROPIC_DEFAULT_SONNET_MODEL when sonnet slot is hidden');
+      assert.equal(env.ANTHROPIC_DEFAULT_HAIKU_MODEL, undefined,
+        'no ANTHROPIC_DEFAULT_HAIKU_MODEL when haiku slot is hidden');
+      assert.equal(env.ANTHROPIC_DEFAULT_OPUS_MODEL, 'visible-opus',
+        'visible opus reaches Claude Code subprocess');
+      assert.equal(env.ANTHROPIC_MODEL, 'visible-default',
+        'visible default reaches Claude Code subprocess');
+    } finally {
+      deleteProvider(provider.id);
+    }
+  });
+
+  it('non-hidden role models are preserved (regression guard)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createProvider, deleteProvider, upsertProviderModel } = require('../../lib/db');
+    const provider = createProvider({
+      name: '__test_non_hidden_role_pass_through__',
+      provider_type: 'anthropic',
+      base_url: 'https://api.anthropic.com',
+      api_key: 'test-key',
+      role_models_json: JSON.stringify({
+        default: 'glm-5-turbo',
+        sonnet: 'glm-5-turbo',
+        small: 'glm-air',
+      }),
+    });
+    try {
+      upsertProviderModel({
+        provider_id: provider.id, model_id: 'glm-5-turbo',
+        upstream_model_id: 'glm-5-turbo', display_name: 'GLM-5-Turbo',
+        enabled: 1, source: 'manual', user_edited: 1, sort_order: 0,
+      });
+      upsertProviderModel({
+        provider_id: provider.id, model_id: 'glm-air',
+        upstream_model_id: 'glm-air', display_name: 'GLM Air',
+        enabled: 1, source: 'manual', user_edited: 1, sort_order: 1,
+      });
+
+      const resolved = resolveProvider({ providerId: provider.id });
+      const env = toClaudeCodeEnv({}, resolved);
+
+      assert.equal(env.ANTHROPIC_MODEL, 'glm-5-turbo',
+        'unhidden default still propagates to ANTHROPIC_MODEL');
+      assert.equal(env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'glm-5-turbo',
+        'unhidden sonnet still propagates');
+      assert.equal(env.ANTHROPIC_SMALL_FAST_MODEL, 'glm-air',
+        'unhidden small still propagates');
+    } finally {
+      deleteProvider(provider.id);
+    }
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
+// Runtime Compatibility Matrix — provider-resolver gating
+// ────────────────────────────────────────────────────────────────
+//
+// `opts.runtime` filters the default-model fallback chain to candidates
+// that the active runtime can actually reach. Combines with the existing
+// `dbHiddenIds` gate. Explicit `opts.model` is honored even if
+// runtime-incompatible — caller asked for it by name, mismatches surface
+// downstream with a clearer error than a silent rewrite would produce.
+
+describe('provider-resolver runtime gate', () => {
+  // Each test in this block sets `default_model` setting to '' so the
+  // global legacy fallback (priority 5 in the resolver) doesn't smuggle
+  // a stale per-machine default in and short-circuit the runtime gate
+  // we're trying to exercise. Restored in teardown so other tests are
+  // unaffected.
+  let savedDefaultModel: string | null | undefined;
+  const setup = () => {
+    savedDefaultModel = getSetting('default_model');
+    setSetting('default_model', '');
+  };
+  const teardown = () => {
+    setSetting('default_model', savedDefaultModel || '');
+  };
+
+  it('codepilot_runtime mode skips claude-code-only role default in fallback chain', () => {
+    setup();
+    // OpenRouter is `codepilot_only`. A claude-* alias on it is still
+    // claude_code_compatible (alias lift), but a non-Anthropic model id
+    // is `codepilot_runtime_compatible` only. With `runtime='claude_code'`
+    // the resolver must skip the role default and pick the visible alias.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createProvider, deleteProvider, upsertProviderModel } = require('../../lib/db');
+    const provider = createProvider({
+      name: '__test_runtime_gate_or__',
+      provider_type: 'openrouter',
+      base_url: 'https://openrouter.ai/api',
+      api_key: 'test-key',
+      role_models_json: JSON.stringify({ default: 'meta-llama/llama-3.1-70b' }),
+    });
+    try {
+      upsertProviderModel({
+        provider_id: provider.id, model_id: 'meta-llama/llama-3.1-70b',
+        upstream_model_id: 'meta-llama/llama-3.1-70b', display_name: 'Llama 3.1 70B',
+        enabled: 1, source: 'manual', user_edited: 1, sort_order: 0,
+      });
+      upsertProviderModel({
+        provider_id: provider.id, model_id: 'anthropic/claude-sonnet-4-6',
+        upstream_model_id: 'anthropic/claude-sonnet-4-6', display_name: 'Sonnet 4.6 via OR',
+        enabled: 1, source: 'manual', user_edited: 1, sort_order: 1,
+      });
+
+      // No runtime gate → role default wins (legacy behavior).
+      const noGate = resolveProvider({ providerId: provider.id });
+      assert.equal(noGate.model, 'meta-llama/llama-3.1-70b',
+        'without runtime gate, role default is honored');
+
+      // claude_code runtime → llama is codepilot_runtime_compatible only,
+      // skipped; claude-* alias picked as fallback.
+      const ccGate = resolveProvider({ providerId: provider.id, runtime: 'claude_code' });
+      assert.notEqual(ccGate.model, 'meta-llama/llama-3.1-70b',
+        'role default that is not claude_code_compatible must be skipped');
+      assert.equal(ccGate.model, 'anthropic/claude-sonnet-4-6',
+        'fallback picks the runtime-compatible model');
+
+      // codepilot_runtime → llama works fine.
+      const cpGate = resolveProvider({ providerId: provider.id, runtime: 'codepilot_runtime' });
+      assert.equal(cpGate.model, 'meta-llama/llama-3.1-70b',
+        'codepilot runtime keeps the codepilot_only role default');
+    } finally {
+      deleteProvider(provider.id);
+      teardown();
+    }
+  });
+
+  it('explicit opts.model is honored even when incompatible with the active runtime', () => {
+    setup();
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createProvider, deleteProvider, upsertProviderModel } = require('../../lib/db');
+    const provider = createProvider({
+      name: '__test_runtime_explicit_honored__',
+      provider_type: 'openrouter',
+      base_url: 'https://openrouter.ai/api',
+      api_key: 'test-key',
+    });
+    try {
+      upsertProviderModel({
+        provider_id: provider.id, model_id: 'meta-llama/llama-3.1-70b',
+        upstream_model_id: 'meta-llama/llama-3.1-70b', display_name: 'Llama 3.1 70B',
+        enabled: 1, source: 'manual', user_edited: 1, sort_order: 0,
+      });
+
+      // Explicit model that is incompatible with claude_code runtime — still honored.
+      const resolved = resolveProvider({
+        providerId: provider.id,
+        model: 'meta-llama/llama-3.1-70b',
+        runtime: 'claude_code',
+      });
+      assert.equal(resolved.model, 'meta-llama/llama-3.1-70b',
+        'explicit opts.model bypasses the runtime gate (caller asked by name)');
+    } finally {
+      deleteProvider(provider.id);
+      teardown();
+    }
+  });
+
+  it('hidden + runtime guards stack in the fallback chain', () => {
+    setup();
+    // Hidden default + runtime-incompatible role default → both skipped,
+    // resolver lands on the runtime-compatible visible fallback.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createProvider, deleteProvider, upsertProviderModel } = require('../../lib/db');
+    const provider = createProvider({
+      name: '__test_runtime_stacked_guards__',
+      provider_type: 'openrouter',
+      base_url: 'https://openrouter.ai/api',
+      api_key: 'test-key',
+      role_models_json: JSON.stringify({
+        default: 'meta-llama/llama-3.1-70b', // codepilot_only — runtime-incompatible for claude_code
+        sonnet: 'hidden-row',                // hidden — both guards block
+      }),
+    });
+    try {
+      upsertProviderModel({
+        provider_id: provider.id, model_id: 'meta-llama/llama-3.1-70b',
+        upstream_model_id: 'meta-llama/llama-3.1-70b', display_name: 'Llama',
+        enabled: 1, source: 'manual', user_edited: 1, sort_order: 0,
+      });
+      upsertProviderModel({
+        provider_id: provider.id, model_id: 'hidden-row',
+        upstream_model_id: 'hidden-row', display_name: 'Hidden Row',
+        enabled: 0, source: 'manual', user_edited: 1, sort_order: 1,
+      });
+      upsertProviderModel({
+        provider_id: provider.id, model_id: 'anthropic/claude-haiku-4-5',
+        upstream_model_id: 'anthropic/claude-haiku-4-5', display_name: 'Haiku',
+        enabled: 1, source: 'manual', user_edited: 1, sort_order: 2,
+      });
+
+      const resolved = resolveProvider({
+        providerId: provider.id,
+        runtime: 'claude_code',
+      });
+      assert.equal(resolved.model, 'anthropic/claude-haiku-4-5',
+        'hidden sonnet AND runtime-incompatible default both skipped');
+      assert.equal(resolved.roleModels.sonnet, undefined,
+        'hidden sonnet slot stripped from roleModels');
+      assert.notEqual(resolved.roleModels.default, 'meta-llama/llama-3.1-70b',
+        'runtime-incompatible default slot stripped from roleModels');
+
+      const env = toClaudeCodeEnv({}, resolved);
+      assert.notEqual(env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'hidden-row',
+        'hidden sonnet does NOT leak into ANTHROPIC_DEFAULT_SONNET_MODEL');
+      assert.notEqual(env.ANTHROPIC_MODEL, 'meta-llama/llama-3.1-70b',
+        'runtime-incompatible default does NOT leak into ANTHROPIC_MODEL');
+      assert.equal(env.ANTHROPIC_MODEL, 'anthropic/claude-haiku-4-5',
+        'ANTHROPIC_MODEL takes the picked fallback');
+    } finally {
+      deleteProvider(provider.id);
+      teardown();
+    }
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
 // routeAuxiliaryModel — pure function tests
 // ────────────────────────────────────────────────────────────────
 

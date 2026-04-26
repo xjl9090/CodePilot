@@ -1,10 +1,12 @@
-import { NextResponse } from 'next/server';
-import { getAllProviders, getDefaultProviderId, setDefaultProviderId, getProvider, getModelsForProvider, getSetting } from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
+import { getAllProviders, getDefaultProviderId, setDefaultProviderId, getProvider, getAllModelsForProvider, getSetting } from '@/lib/db';
 import { getContextWindow } from '@/lib/model-context';
 import { getDefaultModelsForProvider, getEffectiveProviderProtocol, findPresetForLegacy } from '@/lib/provider-catalog';
 import type { Protocol } from '@/lib/provider-catalog';
 import type { ErrorResponse, ProviderModelGroup } from '@/types';
 import { getOAuthStatus } from '@/lib/openai-oauth-manager';
+import { getProviderCompat, getModelCompat } from '@/lib/runtime-compat';
+import { isChatRuntimeParam, resolveChatRuntimeParam, type ChatRuntime } from '@/lib/chat-runtime';
 
 // OpenAI models available through ChatGPT Plus/Pro OAuth (Codex API)
 // Reasoning effort defaults to 'medium' server-side (not user-configurable)
@@ -83,8 +85,19 @@ function deduplicateModels(models: ModelEntry[]): ModelEntry[] {
 const MEDIA_PROTOCOLS = new Set<string>(['gemini-image', 'openai-image']);
 const MEDIA_PROVIDER_TYPES = new Set(['gemini-image', 'openai-image']);
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // Optional `?runtime=` query — when present, every group has its model
+    // list filtered down to entries compatible with the specified runtime.
+    // Accepts `claude_code` / `codepilot_runtime` (explicit) or `auto` (let
+    // the server resolve via `agent_runtime` setting + CLI binary check).
+    // No param at all = no filtering — used by Settings > Providers' global
+    // default-model selector that needs to see the full catalog.
+    const runtimeParam = request.nextUrl.searchParams.get('runtime');
+    const runtimeFilter: ChatRuntime | null = (runtimeParam && isChatRuntimeParam(runtimeParam))
+      ? resolveChatRuntimeParam(runtimeParam)
+      : null;
+
     const providers = getAllProviders();
     const groups: ProviderModelGroup[] = [];
 
@@ -105,6 +118,7 @@ export async function GET() {
         provider_id: 'env',
         provider_name: 'Claude Code',
         provider_type: 'anthropic',
+        compat: 'claude_code_ready',
         ...(!envHasDirectCredentials ? { sdkProxyOnly: true } : {}),
         // Use upstreamModelId for context-window lookup so the bare `opus`
         // alias doesn't get clamped to the 200K Bedrock/Vertex value.
@@ -160,59 +174,71 @@ export async function GET() {
       // Get models: DB provider_models first, then catalog defaults, then env fallback
       let rawModels: ModelEntry[];
 
-      // 1) Check DB provider_models table
-      let dbModels: { value: string; label: string; upstreamModelId?: string; capabilities?: Record<string, unknown> }[] = [];
+      // 1) Read provider_models — the *enabled* rows feed the picker, but we
+      //    also need the *full* row set as a suppression list so disabled
+      //    rows aren't re-added by the catalog fallback below.
+      const dbModels: { value: string; label: string; upstreamModelId?: string; capabilities?: Record<string, unknown>; variants?: Record<string, unknown> }[] = [];
+      const dbHiddenIds = new Set<string>();
+      let dbHasAnyRow = false;
       try {
-        const provModels = getModelsForProvider(provider.id);
-        if (provModels.length > 0) {
-          dbModels = provModels.map(m => {
-            let caps: Record<string, unknown> | undefined;
-            let vars: Record<string, unknown> | undefined;
-            try { const p = JSON.parse(m.capabilities_json || '{}'); if (Object.keys(p).length > 0) caps = p; } catch { /* ignore */ }
-            try { const v = JSON.parse(m.variants_json || '{}'); if (Object.keys(v).length > 0) vars = v; } catch { /* ignore */ }
-            return {
-              value: m.model_id,
-              label: m.display_name || m.model_id,
-              upstreamModelId: m.upstream_model_id || undefined,
-              capabilities: caps,
-              variants: vars,
-            };
+        const provModelsAll = getAllModelsForProvider(provider.id);
+        dbHasAnyRow = provModelsAll.length > 0;
+        for (const m of provModelsAll) {
+          if (m.enabled === 0) {
+            dbHiddenIds.add(m.model_id);
+            continue;
+          }
+          let caps: Record<string, unknown> | undefined;
+          let vars: Record<string, unknown> | undefined;
+          try { const p = JSON.parse(m.capabilities_json || '{}'); if (Object.keys(p).length > 0) caps = p; } catch { /* ignore */ }
+          try { const v = JSON.parse(m.variants_json || '{}'); if (Object.keys(v).length > 0) vars = v; } catch { /* ignore */ }
+          dbModels.push({
+            value: m.model_id,
+            label: m.display_name || m.model_id,
+            upstreamModelId: m.upstream_model_id || undefined,
+            capabilities: caps,
+            variants: vars,
           });
         }
       } catch { /* table may not exist in old DBs */ }
 
-      // 2) Catalog defaults
+      // 2) Catalog defaults — but skip any id the user has explicitly hidden
+      //    in the Models page, otherwise the picker silently re-adds them.
       const catalogModels = getDefaultModelsForProvider(protocol, provider.base_url, provider.provider_type);
-      const catalogRaw = catalogModels.map(m => ({
-        value: m.modelId,
-        label: m.displayName,
-        upstreamModelId: m.upstreamModelId,
-        capabilities: m.capabilities as Record<string, unknown> | undefined,
-      }));
+      const catalogRaw = catalogModels
+        .filter(m => !dbHiddenIds.has(m.modelId))
+        .map(m => ({
+          value: m.modelId,
+          label: m.displayName,
+          upstreamModelId: m.upstreamModelId,
+          capabilities: m.capabilities as Record<string, unknown> | undefined,
+        }));
 
-      // Start with DB models + catalog defaults.
-      // If both are empty (e.g. Volcengine where user must specify model names),
-      // leave rawModels empty — do NOT fall back to DEFAULT_MODELS (Sonnet/Opus/Haiku).
-      if (dbModels.length > 0) {
+      if (dbHasAnyRow) {
+        // User has materialized rows for this provider — DB enabled set is
+        // authoritative. Only catalog ids that are NEITHER in the DB nor
+        // hidden show through (covers brand-new catalog additions the user
+        // hasn't seen yet).
         const dbIds = new Set(dbModels.map(m => m.value));
         rawModels = [...dbModels, ...catalogRaw.filter(m => !dbIds.has(m.value))];
       } else {
         rawModels = [...catalogRaw];
       }
 
-      // Inject models from role_models_json into the list if not already present
-      // (e.g. user configured "ark-code-latest" for a Volcengine or anthropic-thirdparty provider)
+      // Inject models from role_models_json into the list if not already
+      // present — but skip ids the user has explicitly hidden in Settings >
+      // Models. Without this guard, hiding a role/default model on the
+      // Models page wouldn't actually remove it from the chat picker.
       try {
         const rm = JSON.parse(provider.role_models_json || '{}');
-        // Collect unique model IDs from all role fields (default, reasoning, small, haiku, sonnet, opus)
         const roleEntries: { id: string; role: string }[] = [];
         for (const role of ['default', 'reasoning', 'small', 'haiku', 'sonnet', 'opus'] as const) {
           if (rm[role] && !roleEntries.some(e => e.id === rm[role])) {
             roleEntries.push({ id: rm[role], role });
           }
         }
-        // Add each role model to the list (default role first, so it appears at the top)
         for (const entry of roleEntries) {
+          if (dbHiddenIds.has(entry.id)) continue;
           if (!rawModels.some(m => m.value === entry.id || m.upstreamModelId === entry.id)) {
             const label = entry.role === 'default' ? entry.id : `${entry.id} (${entry.role})`;
             rawModels.unshift({ value: entry.id, label });
@@ -220,14 +246,14 @@ export async function GET() {
         }
       } catch { /* ignore */ }
 
-      // Legacy: inject ANTHROPIC_MODEL from env overrides if not already present
-      // Also check upstreamModelId to avoid duplicates (e.g. catalog has modelId='sonnet'
-      // with upstreamModelId='mimo-v2-pro', and env has ANTHROPIC_MODEL='mimo-v2-pro')
+      // Legacy: inject ANTHROPIC_MODEL from env overrides — same hidden-set
+      // guard, same reasoning.
       try {
         const envOverrides = provider.env_overrides_json || provider.extra_env || '{}';
         const envObj = JSON.parse(envOverrides);
-        if (envObj.ANTHROPIC_MODEL && !rawModels.some(m => m.value === envObj.ANTHROPIC_MODEL || m.upstreamModelId === envObj.ANTHROPIC_MODEL)) {
-          rawModels.unshift({ value: envObj.ANTHROPIC_MODEL, label: envObj.ANTHROPIC_MODEL });
+        const envModelId = envObj.ANTHROPIC_MODEL;
+        if (envModelId && !dbHiddenIds.has(envModelId) && !rawModels.some(m => m.value === envModelId || m.upstreamModelId === envModelId)) {
+          rawModels.unshift({ value: envModelId, label: envModelId });
         }
       } catch { /* ignore */ }
 
@@ -256,11 +282,24 @@ export async function GET() {
       const preset = findPresetForLegacy(provider.base_url, provider.provider_type, protocol);
       const sdkProxyOnly = preset?.sdkProxyOnly === true;
 
+      // total_count is the user-visible "synced model count" on Provider cards.
+      // Counts everything in provider_models for this provider (enabled +
+      // hidden), or the catalog size when the table is empty (e.g. a fresh
+      // catalog-only provider whose seed already ran for the picker).
+      const totalCount = dbHasAnyRow
+        ? (dbModels.length + dbHiddenIds.size)
+        : catalogModels.length;
+
       groups.push({
         provider_id: provider.id,
         provider_name: provider.name,
         provider_type: provider.provider_type,
         ...(sdkProxyOnly ? { sdkProxyOnly: true } : {}),
+        total_count: totalCount,
+        compat: getProviderCompat({
+          provider_type: provider.provider_type,
+          base_url: provider.base_url,
+        }),
         models,
       });
     }
@@ -273,23 +312,64 @@ export async function GET() {
           provider_id: 'openai-oauth',
           provider_name: `OpenAI${oauthStatus.plan ? ` (${oauthStatus.plan})` : ''}`,
           provider_type: 'openai-oauth',
+          compat: 'codepilot_only',
           models: OPENAI_OAUTH_MODELS,
         });
       }
     } catch { /* OpenAI OAuth module not available */ }
 
+    // Apply runtime filter — only when caller asked for it. Two layers:
+    //   1. Group layer: drop sdkProxyOnly groups in codepilot_runtime mode
+    //      (their wire format requires the SDK subprocess), and never let
+    //      media_only through (also caught at row layer below).
+    //   2. Row layer: getModelCompat per model — drop media flags, drop
+    //      rows whose runtime flag isn't set. Keeps the alias lift behavior
+    //      (claude-* on codepilot_only providers stays claude_code_compatible).
+    //
+    // Empty groups are kept (`models: []`) so the picker can still surface
+    // the provider chip — caller decides whether to render an empty section.
+    // This matches `design.md` §"Filter precedence": hidden gates win first
+    // (already applied above), runtime filter narrows next, media never
+    // reaches chat surfaces.
+    let outGroups = groups;
+    if (runtimeFilter) {
+      outGroups = groups.map(g => {
+        const providerCompat = g.compat ?? 'unknown';
+        if (providerCompat === 'media_only') return { ...g, models: [] };
+        // sdkProxyOnly providers (MiniMax / Xiaomi-MiMo / some Code Plan
+        // brands) only accept the SDK wire format — CodePilot Runtime can't
+        // route to them, so the entire group disappears in that mode.
+        if (runtimeFilter === 'codepilot_runtime' && g.sdkProxyOnly) {
+          return { ...g, models: [] };
+        }
+        const filteredModels = g.models.filter(m => {
+          const cap = getModelCompat({
+            modelId: m.value,
+            upstreamModelId: m.upstreamModelId,
+            providerCompat,
+            capabilities: m.capabilities as Parameters<typeof getModelCompat>[0]['capabilities'],
+          });
+          if (cap.media) return false;
+          return runtimeFilter === 'claude_code'
+            ? !!cap.claude_code_compatible
+            : !!cap.codepilot_runtime_compatible;
+        });
+        return { ...g, models: filteredModels };
+      });
+    }
+
     // Determine default provider — auto-heal stale references on read
     let defaultProviderId = getDefaultProviderId();
     if (defaultProviderId && !getProvider(defaultProviderId)) {
       // Stale default (provider was deleted). Fix it now.
-      const firstValid = groups.find(g => g.provider_id !== 'env');
+      const firstValid = outGroups.find(g => g.provider_id !== 'env');
       defaultProviderId = firstValid?.provider_id || '';
       setDefaultProviderId(defaultProviderId);
     }
-    defaultProviderId = defaultProviderId || groups[0]?.provider_id || '';
+    defaultProviderId = defaultProviderId || outGroups[0]?.provider_id || '';
 
     return NextResponse.json({
-      groups,
+      groups: outGroups,
       default_provider_id: defaultProviderId,
     });
   } catch (error) {

@@ -24,12 +24,14 @@ import {
   getActiveProvider,
   getAllProviders,
   getSetting,
-  getModelsForProvider,
+  getAllModelsForProvider,
   getProviderOptions,
 } from './db';
 import { ensureTokenFresh } from './openai-oauth-manager';
 import { CODEX_API_ENDPOINT } from './openai-oauth';
 import { hasClaudeSettingsCredentials } from './claude-settings';
+import { getProviderCompat, getModelCompat } from './runtime-compat';
+import type { ChatRuntime } from './chat-runtime';
 
 // ── Resolution result ───────────────────────────────────────────
 
@@ -75,6 +77,21 @@ export interface ResolveOptions {
   sessionModel?: string;
   /** Use case — affects which role model to pick */
   useCase?: 'default' | 'reasoning' | 'small';
+  /**
+   * Active chat-side runtime. When set, the default-model fallback chain
+   * (globalDefault → roleModels.default → setting → availableModels[0])
+   * skips models whose `getModelCompat()` flag doesn't match this runtime,
+   * alongside the existing hidden-id guard.
+   *
+   * Explicit `opts.model` / `opts.sessionModel` are still honored even when
+   * incompatible — the caller asked for them by name. Mismatches surface
+   * downstream (route layer, SDK error) rather than being silently rewritten.
+   *
+   * Omit (or leave undefined) to keep the legacy behavior of considering
+   * every enabled model — used by Settings > Providers' global default-model
+   * picker which surfaces the full catalog regardless of current runtime.
+   */
+  runtime?: ChatRuntime;
 }
 
 /**
@@ -752,21 +769,29 @@ function buildResolution(
     }
   }
 
-  // Get available models: DB provider_models take priority, then catalog defaults
+  // Get available models: DB provider_models is authoritative when populated.
+  // The user's hidden ids (enabled=0 rows) MUST suppress the catalog fallback,
+  // otherwise the runtime sees models the user explicitly hid in Settings >
+  // Models. We fetch all rows and partition into enabled-set + hidden-set.
+  // `dbHiddenIds` is also used downstream to guard the role-default fallback.
   let availableModels = getDefaultModelsForProvider(protocol, provider.base_url, provider.provider_type);
+  let dbHiddenIds = new Set<string>();
   try {
-    const dbModels = getModelsForProvider(provider.id);
-    if (dbModels.length > 0) {
-      // Convert DB rows to CatalogModel and merge (DB models override catalog by modelId)
-      const dbCatalog: CatalogModel[] = dbModels.map(m => ({
+    const dbAll = getAllModelsForProvider(provider.id);
+    if (dbAll.length > 0) {
+      dbHiddenIds = new Set(dbAll.filter(m => m.enabled === 0).map(m => m.model_id));
+      const dbEnabled = dbAll.filter(m => m.enabled === 1);
+      const dbCatalog: CatalogModel[] = dbEnabled.map(m => ({
         modelId: m.model_id,
         upstreamModelId: m.upstream_model_id || undefined,
         displayName: m.display_name || m.model_id,
         capabilities: safeParseCapabilities(m.capabilities_json),
       }));
-      // Merge: DB models first, then catalog models not already in DB
       const dbIds = new Set(dbCatalog.map(m => m.modelId));
-      availableModels = [...dbCatalog, ...availableModels.filter(m => !dbIds.has(m.modelId))];
+      availableModels = [
+        ...dbCatalog,
+        ...availableModels.filter(m => !dbIds.has(m.modelId) && !dbHiddenIds.has(m.modelId)),
+      ];
     }
   } catch { /* provider_models table may not exist in old DBs */ }
 
@@ -779,20 +804,87 @@ function buildResolution(
   const applicableGlobalDefault = (globalDefaultModel && globalDefaultProvider === provider.id)
     ? globalDefaultModel : undefined;
 
+  // Pre-compute provider compat + a model-id index so the runtime guard
+  // below can check capabilities in O(1). Only built when a runtime is
+  // requested — keeps the no-runtime path the same shape as before.
+  const providerCompat = getProviderCompat({
+    provider_type: provider.provider_type,
+    base_url: provider.base_url,
+  });
+  const modelIndex: Map<string, CatalogModel> = opts.runtime
+    ? new Map(availableModels.map(m => [m.modelId, m]))
+    : new Map();
+  /** Runtime-compat guard for default-model fallback selection.
+   *  - No runtime requested → always pass (legacy behavior).
+   *  - Unknown id → fall back to the upstream defaults of the runtime
+   *    (resolved via `getModelCompat({ providerCompat })`); this matters
+   *    for ids that are referenced from `roleModels` / settings but
+   *    haven't materialized into `availableModels` yet (e.g. preset
+   *    role default before discovery has been run). */
+  const runtimeOk = (id: string | undefined): boolean => {
+    if (!opts.runtime) return true;
+    if (!id) return false;
+    const entry = modelIndex.get(id);
+    const cap = getModelCompat({
+      modelId: id,
+      upstreamModelId: entry?.upstreamModelId,
+      providerCompat,
+      capabilities: entry?.capabilities,
+    });
+    if (cap.media) return false;
+    return opts.runtime === 'claude_code'
+      ? !!cap.claude_code_compatible
+      : !!cap.codepilot_runtime_compatible;
+  };
+  // For the final fallback `availableModels[0]?.modelId` step we want the
+  // first model that is both enabled (already encoded in `availableModels`,
+  // which excludes `dbHiddenIds`) AND compatible with the active runtime.
+  const runtimeFilteredAvailable = opts.runtime
+    ? availableModels.filter(m => runtimeOk(m.modelId))
+    : availableModels;
+
   // Resolve model — priority:
-  //   1. Explicit request model (opts.model)
-  //   2. Session's stored model (opts.sessionModel)
+  //   1. Explicit request model (opts.model)        ← honored even if hidden /
+  //                                                   runtime-incompatible;
+  //                                                   user asked for it explicitly
+  //   2. Session's stored model (opts.sessionModel) ← stored at the session level,
+  //                                                   trust it
   //   3. Global default model (only if it belongs to this provider)
   //   4. Provider's roleModels.default (preset default, e.g. "ark-code-latest")
   //   5. Global default_model setting (legacy)
-  const requestedModel = opts.model || opts.sessionModel || applicableGlobalDefault || roleModels.default || getSetting('default_model') || undefined;
+  //
+  // Steps 3-5 fall through to the next entry when the candidate is in
+  // `dbHiddenIds` OR is incompatible with `opts.runtime` — a hidden model
+  // must never be silently selected as a default, and a model the active
+  // runtime can't reach should not be picked as the default either (it
+  // would fail at the route / SDK layer with a confusing error). Final
+  // fallback: the first enabled+compatible entry in `availableModels`,
+  // and only if that filter yields nothing do we fall back to the first
+  // enabled model regardless of runtime — that lets us still produce a
+  // resolution for users with no compatible model configured.
+  const visibleOrUndef = (id: string | undefined) =>
+    (!id || dbHiddenIds.has(id) || !runtimeOk(id)) ? undefined : id;
+  const requestedModel = opts.model
+    || opts.sessionModel
+    || visibleOrUndef(applicableGlobalDefault)
+    || visibleOrUndef(roleModels.default)
+    || visibleOrUndef(getSetting('default_model') || undefined)
+    || runtimeFilteredAvailable[0]?.modelId
+    || availableModels[0]?.modelId
+    || undefined;
   let model = requestedModel;
   let upstreamModel: string | undefined;
   let modelDisplayName: string | undefined;
 
-  // If a use case is specified, check role models for that use case
+  // If a use case is specified, check role models for that use case — but
+  // skip if that role's mapped model is hidden or runtime-incompatible
+  // (fall back to the request model). Same precedence as the default chain
+  // above; useCase routing must not bypass the runtime gate.
   if (opts.useCase && opts.useCase !== 'default' && roleModels[opts.useCase]) {
-    model = roleModels[opts.useCase];
+    const roleModel = roleModels[opts.useCase];
+    if (roleModel && !dbHiddenIds.has(roleModel) && runtimeOk(roleModel)) {
+      model = roleModel;
+    }
   }
 
   // Find display name and upstream model ID from catalog
@@ -809,12 +901,48 @@ function buildResolution(
     upstreamModel = model;
   }
 
-  // Ensure roleModels.default reflects the upstream model for the current request,
-  // so toClaudeCodeEnv() sets ANTHROPIC_MODEL to the correct upstream ID.
-  // Only override when the request explicitly specifies a model (opts.model) and
-  // we found a different upstream ID via catalog lookup.
-  if (upstreamModel && opts.model && upstreamModel !== roleModels.default) {
-    roleModels = { ...roleModels, default: upstreamModel };
+  // Strip role slots that would leak the wrong model into the SDK subprocess
+  // env via `toClaudeCodeEnv()`. Two gates apply, both targeting
+  // `ANTHROPIC_MODEL` / `ANTHROPIC_DEFAULT_*_MODEL` / `ANTHROPIC_REASONING_MODEL`
+  // / `ANTHROPIC_SMALL_FAST_MODEL`:
+  //   - Hidden:  user explicitly turned the model off in Settings > Models;
+  //              honoring it in the subprocess violates that intent.
+  //   - Runtime: when the active chat-side runtime is requested, slots that
+  //              point at runtime-incompatible models can't be served by the
+  //              Claude Code subprocess (e.g. a `codepilot_only` row used as
+  //              `roleModels.default` would set `ANTHROPIC_MODEL` to a model
+  //              that Claude Code can't reach).
+  // `runtimeOk` returns `true` when no `opts.runtime` was given, so the
+  // legacy no-runtime caller path keeps the hidden-only behavior.
+  if (dbHiddenIds.size > 0 || opts.runtime) {
+    let dirty = false;
+    const cleaned: RoleModels = { ...roleModels };
+    for (const key of Object.keys(cleaned) as Array<keyof RoleModels>) {
+      const v = cleaned[key];
+      if (!v) continue;
+      if (dbHiddenIds.has(v) || !runtimeOk(v)) {
+        cleaned[key] = undefined;
+        dirty = true;
+      }
+    }
+    if (dirty) roleModels = cleaned;
+  }
+
+  // Ensure roleModels.default points at a model the user actually wants:
+  //   1. Explicit override path: caller passed opts.model and catalog mapped
+  //      it to a different upstream id (existing behaviour).
+  //   2. Fill-stripped path: the original default was just stripped as hidden
+  //      above, so default is now empty — fill it with the picked fallback
+  //      so toClaudeCodeEnv() still sets ANTHROPIC_MODEL. Without this,
+  //      ANTHROPIC_MODEL would be unset and the Claude Code subprocess would
+  //      fall back to its own internal default, which may not match what
+  //      the chat picker actually surfaces to the user.
+  if (upstreamModel) {
+    const explicitOverride = !!opts.model && upstreamModel !== roleModels.default;
+    const fillStrippedDefault = !roleModels.default;
+    if (explicitOverride || fillStrippedDefault) {
+      roleModels = { ...roleModels, default: upstreamModel };
+    }
   }
 
   // Has credentials?

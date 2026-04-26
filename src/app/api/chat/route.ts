@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { streamClaude } from '@/lib/claude-client';
 import { addMessage, getMessages, getSession, getSessionSummary, updateSessionTitle, updateSdkSessionId, updateSessionModel, updateSessionProvider, updateSessionProviderId, getSetting, acquireSessionLock, renewSessionLock, releaseSessionLock, setSessionRuntimeStatus, syncSdkTasks } from '@/lib/db';
 import { resolveProvider as resolveProviderUnified } from '@/lib/provider-resolver';
+import { getActiveChatRuntime } from '@/lib/chat-runtime';
 import { notifySessionStart, notifySessionComplete, notifySessionError } from '@/lib/telegram-bot';
 import { extractCompletion } from '@/lib/onboarding-completion';
 import { loadCodePilotMcpServers, loadAllMcpServers } from '@/lib/mcp-loader';
@@ -255,12 +256,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Resolve provider via unified resolver (same logic for chat, bridge, onboarding, etc.)
+    // `runtime` gates the default-model fallback chain to models compatible
+    // with the active runtime (claude_code vs codepilot_runtime). Explicit
+    // `model` from the request is still honored even if incompatible — the
+    // user picked it deliberately. Fallback selection (no model in request,
+    // hidden role default, etc.) skips runtime-incompatible candidates so the
+    // server doesn't pick a model the SDK / ai-sdk path can't actually reach.
     const effectiveProviderId = provider_id || session.provider_id || '';
     const resolved = resolveProviderUnified({
       providerId: effectiveProviderId || undefined,
       sessionProviderId: session.provider_id || undefined,
       model: model || undefined,
       sessionModel: session.model || undefined,
+      runtime: getActiveChatRuntime(),
     });
     const resolvedProvider = resolved.provider;
 

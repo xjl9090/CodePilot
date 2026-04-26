@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import type { ProviderModelGroup } from '@/types';
+import type { ChatRuntimeParam } from '@/lib/chat-runtime';
 
 // Default Claude model options — used as fallback when API is unavailable
 export interface DefaultModelOption {
@@ -41,9 +42,20 @@ export interface UseProviderModelsReturn {
   globalDefaultProvider: string | undefined;
 }
 
+/**
+ * @param runtime  Runtime gate for the picker feed.
+ *   - `'auto'` (default): server resolves the active runtime and filters
+ *     to compatible models — chat picker behavior; user shouldn't see
+ *     models the active runtime can't reach.
+ *   - explicit `'claude_code'` / `'codepilot_runtime'`: server uses that
+ *     value directly. Useful for previewing the other runtime's catalog.
+ *   - `null`: skip the filter entirely — caller wants the full catalog
+ *     (e.g. Settings > Providers' global default-model selector).
+ */
 export function useProviderModels(
   providerId?: string,
   modelName?: string,
+  runtime: ChatRuntimeParam | null = 'auto',
 ): UseProviderModelsReturn {
   const [providerGroups, setProviderGroups] = useState<ProviderModelGroup[]>([]);
   const [defaultProviderId, setDefaultProviderId] = useState<string>('');
@@ -51,7 +63,10 @@ export function useProviderModels(
   const [globalDefaultProvider, setGlobalDefaultProvider] = useState<string | undefined>();
 
   const fetchAll = useCallback(() => {
-    fetch('/api/providers/models')
+    const url = runtime
+      ? `/api/providers/models?runtime=${encodeURIComponent(runtime)}`
+      : '/api/providers/models';
+    fetch(url)
       .then((r) => r.json())
       .then((data) => {
         if (data.groups && data.groups.length > 0) {
@@ -84,7 +99,7 @@ export function useProviderModels(
         setGlobalDefaultProvider(data?.options?.default_model_provider || undefined);
       })
       .catch(() => {});
-  }, []);
+  }, [runtime]);
 
   // Load on mount and listen for provider changes
   useEffect(() => {

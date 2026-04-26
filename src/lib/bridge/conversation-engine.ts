@@ -27,6 +27,7 @@ import {
   getDefaultProviderId,
 } from '../db';
 import { resolveProvider as resolveProviderUnified } from '../provider-resolver';
+import { getActiveChatRuntime } from '../chat-runtime';
 import { loadCodePilotMcpServers, loadAllMcpServers } from '../mcp-loader';
 import { assembleContext } from '../context-assembler';
 import { predictNativeRuntime } from '../runtime';
@@ -163,10 +164,14 @@ export async function processMessage(
     // 4. 'env' mode fallback
     const effectiveProviderId = binding.providerId || session?.provider_id || getDefaultProviderId() || undefined;
 
+    // Same runtime gate as the main /api/chat route — bridge sessions go
+    // through the same SDK / ai-sdk paths, so the default-model fallback
+    // must respect the active runtime's compat constraints.
     const resolved = resolveProviderUnified({
       providerId: effectiveProviderId,
       model: binding.model || undefined,
       sessionModel: session?.model || undefined,
+      runtime: getActiveChatRuntime(),
     });
     const resolvedProvider = resolved.provider;
 
