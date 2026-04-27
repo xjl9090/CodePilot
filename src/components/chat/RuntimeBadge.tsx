@@ -9,7 +9,8 @@ import {
   HoverCardTrigger,
   HoverCardContent,
 } from '@/components/ui/hover-card';
-import { resolveLegacyRuntimeForDisplay, type ConcreteRuntime } from '@/lib/runtime/legacy';
+import type { ConcreteRuntime } from '@/lib/runtime/legacy';
+import { computeEffectiveRuntime, type AgentRuntime } from '@/lib/runtime/effective';
 
 interface RuntimeBadgeProps {
   providerId?: string;
@@ -21,18 +22,33 @@ const LABELS: Record<ConcreteRuntime, { en: string; zh: string }> = {
 };
 
 export function RuntimeBadge({ providerId }: RuntimeBadgeProps) {
-  // 0.50.3 removed 'auto' as a user-visible state. We still read whatever is
-  // stored (possibly 'auto' on legacy rows) but coerce immediately via
-  // resolveLegacyRuntimeForDisplay — the badge never surfaces 'Agent: Auto'.
-  const [runtimeSetting, setRuntimeSetting] = useState<ConcreteRuntime>('claude-code-sdk');
+  // Stored preference + the cli_enabled override. Legacy `'auto'` values
+  // are coerced inside `computeEffectiveRuntime`. We track both fields
+  // because `cli_enabled=false` is the highest-priority override in
+  // `registry.ts:resolveRuntime` — without reading it here, the badge
+  // would show "Claude Code" while chat actually runs AI SDK whenever
+  // a legacy DB has the two fields drifted.
+  const [storedRuntime, setStoredRuntime] = useState<string>("claude-code-sdk");
+  const [cliEnabled, setCliEnabled] = useState<boolean>(true);
+  const [cliConnected, setCliConnected] = useState<boolean>(false);
   const router = useRouter();
   const { t } = useTranslation();
   const isZh = t('nav.chats') === '对话';
 
-  // OpenAI models can't use Claude Code SDK — forced to AI SDK
+  // Resolved runtime mirrors the one used by RuntimePanel +
+  // registry.ts. The badge UI treats both ConcreteRuntime and
+  // AgentRuntime as the same 2-value union.
+  const settingRuntime: AgentRuntime = computeEffectiveRuntime(storedRuntime, cliEnabled, cliConnected);
+
+  // OpenAI models can't use Claude Code SDK — forced to AI SDK regardless
+  // of the stored preference + cli_enabled.
   const isNonAnthropicProvider = providerId === 'openai-oauth';
-  const effectiveRuntime: ConcreteRuntime = isNonAnthropicProvider ? 'native' : runtimeSetting;
-  const isOverridden = isNonAnthropicProvider && runtimeSetting === 'claude-code-sdk';
+  const effectiveRuntime: ConcreteRuntime = isNonAnthropicProvider ? 'native' : (settingRuntime as ConcreteRuntime);
+  // Override flag — true when the user's stored preference says Claude Code
+  // but something (provider type, cli_enabled=false, CLI not connected)
+  // routed them away. Drives the explanatory hover-card content.
+  const isOverridden =
+    storedRuntime === "claude-code-sdk" && effectiveRuntime !== "claude-code-sdk";
 
   useEffect(() => {
     const loadRuntime = async () => {
@@ -43,11 +59,13 @@ export function RuntimeBadge({ providerId }: RuntimeBadgeProps) {
         ]);
         const settings = settingsRes?.ok ? await settingsRes.json() : null;
         const status = statusRes?.ok ? await statusRes.json() : null;
-        const saved = settings?.settings?.agent_runtime;
-        const cliConnected = !!status?.connected;
-        setRuntimeSetting(resolveLegacyRuntimeForDisplay(saved, cliConnected));
+        const saved = settings?.settings?.agent_runtime ?? "claude-code-sdk";
+        const savedCliEnabled = settings?.settings?.cli_enabled !== "false";
+        setStoredRuntime(saved);
+        setCliEnabled(savedCliEnabled);
+        setCliConnected(!!status?.connected);
       } catch {
-        /* ignore — keep previous runtimeSetting */
+        /* ignore — keep previous values */
       }
     };
     loadRuntime();
@@ -57,6 +75,22 @@ export function RuntimeBadge({ providerId }: RuntimeBadgeProps) {
   }, []);
 
   const label = LABELS[effectiveRuntime];
+
+  // Stored-preference label for the override hover-card body — what the
+  // user thinks they picked, before any override applied.
+  const storedRuntimeForLabel: ConcreteRuntime =
+    storedRuntime === "native" ? "native" : "claude-code-sdk";
+  const overrideReason = isNonAnthropicProvider
+    ? (isZh
+        ? "OpenAI 模型不支持 Claude Code 引擎，已自动切换为 AI SDK"
+        : "OpenAI models are not compatible with Claude Code engine, automatically switched to AI SDK")
+    : !cliEnabled
+      ? (isZh
+          ? "Claude Code CLI 已在「设置 → Runtime」关闭，运行时改走 AI SDK"
+          : "Claude Code CLI is disabled in Settings → Runtime, routing through AI SDK instead")
+      : (isZh
+          ? "Claude Code CLI 未检测到，运行时改走 AI SDK"
+          : "Claude Code CLI not detected, routing through AI SDK instead");
 
   return (
     <HoverCard openDelay={200} closeDelay={100}>
@@ -69,18 +103,14 @@ export function RuntimeBadge({ providerId }: RuntimeBadgeProps) {
           {isZh ? label.zh : label.en}
         </Badge>
       </HoverCardTrigger>
-      <HoverCardContent side="top" align="end" className="w-56 p-3 text-xs space-y-1.5">
+      <HoverCardContent side="top" align="end" className="w-64 p-3 text-xs space-y-1.5">
         {isOverridden ? (
           <>
             <p>{isZh
-              ? `当前使用 AI SDK 引擎（全局设置为 ${LABELS[runtimeSetting].zh}）`
-              : `Using AI SDK engine (global setting: ${LABELS[runtimeSetting].en})`
+              ? `当前实际走 ${LABELS[effectiveRuntime].zh.replace('Agent 引擎：', '')}（保存的偏好是 ${LABELS[storedRuntimeForLabel].zh.replace('Agent 引擎：', '')}）`
+              : `Currently routing through ${LABELS[effectiveRuntime].en.replace('Agent: ', '')} (saved preference: ${LABELS[storedRuntimeForLabel].en.replace('Agent: ', '')})`
             }</p>
-            <p className="text-muted-foreground">
-              {isZh
-                ? 'OpenAI 模型不支持 Claude Code 引擎，已自动切换为 AI SDK'
-                : 'OpenAI models are not compatible with Claude Code engine, automatically switched to AI SDK'}
-            </p>
+            <p className="text-muted-foreground">{overrideReason}</p>
           </>
         ) : (
           <p className="text-muted-foreground">

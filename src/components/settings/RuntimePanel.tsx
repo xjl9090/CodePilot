@@ -75,6 +75,11 @@ import {
   resolveLegacyRuntimeForDisplay,
   isConcreteRuntime,
 } from "@/lib/runtime/legacy";
+import {
+  computeEffectiveRuntime,
+  resolveNewChatDefault,
+  runtimeDisplayLabel,
+} from "@/lib/runtime/effective";
 import type { TranslationKey } from "@/i18n";
 import type { ProviderOptions } from "@/types";
 import { cn } from "@/lib/utils";
@@ -474,7 +479,11 @@ export function RuntimePanel() {
           setDefaultModelLabel(null);
         } else {
           setNoCompatibleProvider(false);
-          // Pull global default pair from the second options request.
+
+          // Pull global default pair from the second options request,
+          // plus localStorage saved pair (mirrors what chat/page.tsx
+          // reads at chat init). Together they let `resolveNewChatDefault`
+          // produce the exact same result chat init would.
           let globalDefaultModel = "";
           let globalDefaultProvider = "";
           if (globalOptRes.ok) {
@@ -485,43 +494,28 @@ export function RuntimePanel() {
             globalDefaultProvider = globalData.options?.default_model_provider ?? "";
           }
 
-          // Same resolution chain as `chat/page.tsx`:
-          //   1. Both global default model + provider set AND model is
-          //      present in the runtime-filtered group → use that pair.
-          //   2. Only provider set → use that provider's first model.
-          //   3. Otherwise → fall back to the per-API `default_provider_id`
-          //      and that group's first model. This mirrors the implicit
-          //      "first valid" used at chat init.
-          let chosenGroup: typeof groups[number] | undefined;
-          let chosenModelValue = "";
-
-          if (globalDefaultModel && globalDefaultProvider) {
-            const targetGroup = groups.find((g) => g.provider_id === globalDefaultProvider);
-            const modelInGroup = targetGroup?.models.find((m) => m.value === globalDefaultModel);
-            if (targetGroup && modelInGroup) {
-              chosenGroup = targetGroup;
-              chosenModelValue = modelInGroup.value;
-            }
-          }
-          if (!chosenGroup && globalDefaultProvider) {
-            const targetGroup = groups.find((g) => g.provider_id === globalDefaultProvider);
-            if (targetGroup?.models?.length) {
-              chosenGroup = targetGroup;
-              chosenModelValue = targetGroup.models[0].value;
-            }
-          }
-          if (!chosenGroup) {
-            const apiDefault = data.default_provider_id
-              ? groups.find((g) => g.provider_id === data.default_provider_id)
-              : undefined;
-            chosenGroup = apiDefault ?? groups[0];
-            chosenModelValue = chosenGroup?.models[0]?.value ?? "";
+          let savedProviderId = "";
+          let savedModel = "";
+          if (typeof window !== "undefined") {
+            savedProviderId = localStorage.getItem("codepilot:last-provider-id") ?? "";
+            savedModel = localStorage.getItem("codepilot:last-model") ?? "";
           }
 
-          if (chosenGroup) {
-            setDefaultProviderName(chosenGroup.provider_name);
-            const labelMatch = chosenGroup.models.find((m) => m.value === chosenModelValue);
-            setDefaultModelLabel(labelMatch?.label ?? chosenGroup.models[0]?.label ?? null);
+          const resolved = resolveNewChatDefault({
+            groups,
+            apiDefaultProviderId: data.default_provider_id,
+            globalDefaultModel,
+            globalDefaultProvider,
+            savedProviderId,
+            savedModel,
+          });
+
+          if (resolved) {
+            setDefaultProviderName(resolved.providerName);
+            setDefaultModelLabel(resolved.modelLabel);
+          } else {
+            setDefaultProviderName(null);
+            setDefaultModelLabel(null);
           }
         }
       } else {
@@ -544,11 +538,34 @@ export function RuntimePanel() {
     fetchAll();
   }, [fetchAll]);
 
+  // Refetch when any provider-changing action elsewhere (Models page
+  // toggle, refresh, role-mapping save, runtime switch on this page,
+  // etc.) dispatches `provider-changed`. Without this listener the
+  // explainer data goes stale: e.g. switching engine from Claude Code
+  // to AI SDK clears the picker but `resolvedRuntimeFromApi` and
+  // `defaultProviderName` hang on the previous probe's result.
+  useEffect(() => {
+    const handler = () => { fetchAll(); };
+    window.addEventListener("provider-changed", handler);
+    return () => window.removeEventListener("provider-changed", handler);
+  }, [fetchAll]);
+
   // ── Engine selector handler ──
   const handleRuntimeChange = async (value: AgentRuntime) => {
     setAgentRuntime(value);
     const cliEnabledValue = value === "native" ? "false" : "true";
     setCliEnabled(cliEnabledValue === "true");
+
+    // Clear stale explainer state immediately so the user doesn't see
+    // the previous resolution while the new fetch is in flight. The
+    // engine-picker cards already re-paint from local state above; the
+    // explainer block needs a server round-trip because runtime=auto
+    // filtering happens server-side.
+    setResolvedRuntimeFromApi(null);
+    setDefaultProviderName(null);
+    setDefaultModelLabel(null);
+    setNoCompatibleProvider(false);
+
     try {
       await fetch("/api/settings/app", {
         method: "PUT",
@@ -557,9 +574,13 @@ export function RuntimePanel() {
           settings: { agent_runtime: value, cli_enabled: cliEnabledValue },
         }),
       });
+      // The `provider-changed` event triggers the listener above, which
+      // calls `fetchAll` and refreshes the explainer. We don't need to
+      // call fetchAll inline — the listener path is the canonical refetch
+      // trigger for any runtime / provider / model change.
       window.dispatchEvent(new Event("provider-changed"));
     } catch {
-      /* ignore */
+      /* ignore — next user action will refetch */
     }
   };
 
@@ -663,22 +684,21 @@ export function RuntimePanel() {
   const hasWarnings = !!claudeStatus?.warnings && claudeStatus.warnings.length > 0;
 
   /**
-   * What the chat runtime registry will *actually* pick. Mirrors the
-   * priority chain in `src/lib/runtime/registry.ts:resolveRuntime`:
+   * What the chat runtime registry will *actually* pick. Delegates to
+   * the shared `computeEffectiveRuntime` helper so this surface, the
+   * chat header `RuntimeBadge`, and `registry.ts:resolveRuntime` all
+   * agree on the same priority chain (`cli_enabled=false` overrides
+   * the stored preference).
    *
-   *   1. cli_enabled === false  → 'native' (highest priority override)
-   *   2. agent_runtime === 'native' or 'claude-code-sdk' → that
-   *
-   * Without this guard, a legacy DB row where `agent_runtime` and
-   * `cli_enabled` drifted apart (e.g. `cli_enabled=false` from an
-   * earlier opt-out + `agent_runtime='claude-code-sdk'` set later)
-   * would show "Claude Code is the default" on this page while the
-   * chat path silently runs on AI SDK.
-   *
-   * `handleRuntimeChange` keeps the two fields in sync going forward,
-   * so this only fires for legacy state on first load.
+   * `handleRuntimeChange` keeps both DB fields in sync on every write,
+   * so the drift warning below only fires for legacy DB rows where
+   * the two settings were saved apart by an earlier build.
    */
-  const effectiveRuntime: AgentRuntime = !cliEnabled ? "native" : agentRuntime;
+  const effectiveRuntime: AgentRuntime = computeEffectiveRuntime(
+    agentRuntime,
+    cliEnabled,
+    connected,
+  );
   const driftWarning = effectiveRuntime !== agentRuntime;
 
   /**
@@ -786,12 +806,22 @@ export function RuntimePanel() {
    * routed elsewhere.
    */
   const resolvedEngineLabel = useMemo(() => {
+    // Authoritative source: API `runtime_applied` field. The /api/providers/models
+    // server-side filter knows the live state of CLI subprocess + cli_enabled
+    // and returns the runtime it actually filtered against. Fall back to the
+    // locally-computed effectiveRuntime only when that field is missing
+    // (request failed or older API version).
     const apiSaid = resolvedRuntimeFromApi;
-    const local = effectiveRuntime;
-    const labelFor = (r: string) => (r === "claude_code" || r === "claude-code-sdk" ? "Claude Code" : "AI SDK");
-    const resolvedLabel = apiSaid ? labelFor(apiSaid) : labelFor(local);
+    // Normalize the API's underscore form to the canonical agent_runtime spelling.
+    const apiNormalized: AgentRuntime | null =
+      apiSaid === "claude_code" ? "claude-code-sdk" : apiSaid === "codepilot_runtime" ? "native" : null;
+    const resolvedRuntime = apiNormalized ?? effectiveRuntime;
+    const resolvedLabel = runtimeDisplayLabel(resolvedRuntime);
 
-    if (agentRuntime === "claude-code-sdk" && resolvedLabel !== "Claude Code") {
+    // Annotate the label when the user's stored preference disagrees
+    // with the actually-resolved runtime — i.e. they picked Claude
+    // Code but CLI is missing OR cli_enabled=false routes them away.
+    if (agentRuntime === "claude-code-sdk" && resolvedRuntime !== "claude-code-sdk") {
       return isZh
         ? `${resolvedLabel}（Claude Code 不可用，自动降级）`
         : `${resolvedLabel} (fallback — Claude Code unavailable)`;
@@ -1200,8 +1230,8 @@ export function RuntimePanel() {
         </h3>
         <p className="text-[11px] text-muted-foreground">
           {isZh
-            ? "下面四行就是 chat init 跑的解析链：?runtime=auto 过滤后选择服务商和模型。每条新消息发送时会重新走一次同样的解析；不持久绑定到某个会话。"
-            : "These four rows are exactly what chat init runs: the runtime-filtered ?runtime=auto query picks a provider + model. Every new message re-runs the same resolution on send; nothing is pinned to a session."}
+            ? "按当前默认设置，下一条新消息会解析为以下运行组合。每次发送前都会重新检查 Runtime、Provider 和模型兼容性 — 不持久绑定到某个会话。"
+            : "With the current defaults, your next new message resolves to the combination below. Runtime, provider, and model compatibility are re-checked on every send — nothing is pinned to a session."}
         </p>
         {noCompatibleProvider ? (
           <div className="rounded-md border border-status-warning-muted bg-status-warning-muted/30 px-3 py-2 text-xs text-status-warning-foreground flex items-start gap-1.5">
