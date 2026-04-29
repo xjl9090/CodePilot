@@ -1,7 +1,7 @@
 # Agent Trust & Ownership Refactor
 
 > 创建时间：2026-04-25
-> 最后更新：2026-04-28
+> 最后更新：2026-04-29
 > 工作区：`/Users/op7418/Documents/code/opus-4.6-test/.claude/worktrees/product-refactor-research`
 > 关联调研：`docs/research/harness-and-ux-refactor.md`
 
@@ -13,8 +13,8 @@
 | Phase 1 | UI 基线、Provider 样板页、设计原则沉淀 | 🔄 进行中 | shadcn Style 已切 radix-luma;`docs/design.md` **partial v1 已写**(0 lint error)含 sidebar/button/input/select/switch/card/tabs spec + 颜色 3 层 + Do/Don't + Confirm-vs-auto-apply 双路径;Provider 样板页 + design.md 完整版待 Phase 1.3-1.6 推进 |
 | Phase 2A | **Provider Trust + Models Control** | ✅ **2026-04-27 阶段性完成** | Provider 卡片三栏、Add Service 五桶分类、保守自动刷新 + manual_* 保护、Models 页是 picker 暴露范围的单一控制点；详见下方 Phase 2A 决策日志 |
 | Phase 2B | Runtime Trust | ✅ **2026-04-27 完成** | Claude Code Runtime + CodePilot Runtime 平级展示、降级原因 + 恢复路径；session 控制延后到 Phase 3 |
-| Phase 2C | **Default Model Contract + Health** | 📋 **下一步** | 默认模型升为 Models/Runtime 共管能力；Auto/Pinned 双模式；Pinned 不可静默 fallback；诊断收敛到 Settings → Health |
-| Phase 3 | Run Cockpit 第一版 | 📋 待开始 | 会话运行状态、session-level Runtime 切换、context fragments、tools/permissions/errors 可观测 |
+| Phase 2C | **Default Model Contract + Health + Logs** | ✅ **2026-04-29 阶段完成 / 收尾验证** | 默认模型升为 Models 页单一写入点；Auto/Pinned 双模式 + invalid-default 硬阻断 + 4 恢复 CTA；Settings → Health 顶级只读总览；About → 持久日志 + 脱敏 + Open log folder + 导出诊断包；旧"诊断 / 修复"承诺被收为"Health 索引 + Logs 取证"。详见下方 Phase 2C 决策日志 + 收尾验证 |
+| Phase 3 | Run Cockpit + session-level Runtime | 📋 **下一步** | v1：chat 顶部状态条（当前 Runtime / Provider / Model / 默认来源 / 健康 dot）。v2：session-level Runtime 切换，仅影响下一轮消息（不热迁移正在 stream 的会话）。session_events 埋点跟随 v2 落库 |
 | Phase 4 | Session / Context / Memory 基础设施 | 📋 待开始 | 事件日志、fragment ledger、Local Agent Adapter Registry、护栏文档、必要 schema/API |
 | Phase 5 | 长期 Agent 最小闭环 | 📋 待开始 | 通知/定时任务只做服务长期助理叙事的最小闭环 |
 | Phase 6 | 回归、CDP 验证、测试包 | 📋 待开始 | `npm run test`、UI CDP、smoke、Electron 包验证 |
@@ -42,7 +42,9 @@
 - 2026-04-27: **2B.6 调整为 deferred**。原计划要求 `session_events.runtime.selected` 在 Phase 2B 落库；评审发现 RuntimePanel 的 read-only 解释块可以直接从 `/api/providers/models?runtime=auto` + `runtime_applied` + 全局默认推导出"新会话会用谁"，并不强依赖事件落库。埋点是 DB schema + provider-resolver 改动，和本阶段的 UX 整改风险面不同，单独一个 commit 更干净。下游消费者是 Phase 3 Cockpit，做埋点跟 Cockpit 同期能更明确 schema。如果 Phase 3 推进时仍未落，重新提为 P0。
 - 2026-04-27: **Session-level Runtime switching 纳入 Phase 3**。全局 Runtime 只作为"新会话默认值"；每个 chat session 应拥有自己的 Agent 引擎选择，用户可以在会话开始前选择，也可以在会话过程中切换。第一版不做运行中热迁移：正在 stream 时禁用切换或要求先停止；切换只对下一轮消息生效。切换后必须重新按目标 runtime 解析 provider/model，若当前组合不兼容，应给出可解释 fallback，并写入 `session_events.runtime.selected` / `runtime.changed`（from / to / reason / provider / model / fallback）。
 - 2026-04-27: **Runtime 长期形态升级为 Local Agent Adapter Registry**。Claude Code / CodePilot Runtime 只是第一批内置 adapter；后续可把 Codex、OpenClaw、其它本地 Agent CLI、自定义 command 作为候选 adapter 纳入同一层管理。适配不要求一开始全能力 UI 化，按能力分层：可检测（installed/version/health）→ 可拉起（cwd/prompt/session）→ 可观察（running/waiting/failed/completed + output/log）→ 可恢复（stop/retry/open native session）→ 深度集成（tools/permissions/model/context/session resume）。UI 必须明确"哪些由 CodePilot 管，哪些由外部 Agent 自管"，避免把外部 Agent 自己的模型/工具/上下文错误拆进 CodePilot 的 Providers / Models 管理。
+- 2026-04-29: **多 Agent 协作方向记录：主 Agent + 显式 `@agent` 调度**。未来聊天里仍保留一个主 Runtime / 主 Agent 负责理解用户意图、拆任务和汇总结果；Codex、Claude Code、OpenClaw、自定义命令等本地/外部 Agent 作为可被显式 `@codex` / `@claude-code` / `@openclaw` 调用的执行者。第一版不做自动多 Agent 编排，也不把所有外部能力 UI 化；先依赖 Local Agent Adapter Registry 提供 detect / launch / observe / log / ownership boundary，再在 Chat 中支持显式调用、结构化结果回写和 `session_events` 轨迹。主 Agent 可以在后续 preview 中建议"这个子任务适合交给 X"，但用户确认前不自动派发。
 - 2026-04-28: **Settings IA Phase 2.5：Overview redesign（dashboard 三层）**。原 Phase 2 Overview 是单列 5 卡，全用同样的 muted 卡片底色——视觉上是"配置页又一个"，没有 dashboard 的体感。本轮按"GitHub Settings / Cursor 计费页"的层级模式重做：① 顶部 Getting Started checklist（4 项：连接服务商 / 启用模型 / 验证 Runtime / 配置助理工作空间），未完成项展示深色 jump 按钮一直挂着，4/4 全完即整条隐藏（不留视觉噪音）；② 中部由 5 卡升为 6 卡 + 改 `lg:grid-cols-2`：把原"系统"拆成"版本与账户" + "设置 / 诊断"，"新会话默认"按用户心智改名为"服务商"，warning-tone 卡片用 `status-warning-muted` 浅色 accent + 深色 CTA 引导，已配置卡片去掉图标 bg 走 flat 背景——配置好的项不再"全黑亮"；③ 底部加 GitHub-style token 用量热力图：复用现成 `/api/usage/stats?days=N`（接口已支持到 365 天，无需后端改动），30/90/365D 切换 + 总用量 / 最活跃日 / 最长连续天数 / 当前连续天数 stats，"查看完整用量统计"跳 #usage。新增文件：`OverviewHeatmap.tsx`；OverviewSection 容器从 `max-w-4xl` 提到 `max-w-5xl` 给 2 列卡 + 365 天热力图留宽度。i18n 加 19 个 `overview.*` 键。CDP 验证：1440×900 桌面 + 800×900 窄屏均无溢出；checklist 在 force-show 模式下 2 pending + 2 done 行展示正确；热力图在窄屏靠 `overflow-x-auto` 兜住，stats 行 `sm:grid-cols-4` 自适应。
+- 2026-04-29: **Phase 2C 阶段完成 + 诊断承诺降档为"Health + Logs"**。**全 7 块落地**：① 默认模型契约（`9a39d42` / `7e74200`）：`global_default_mode` schema + `resolveNewChatDefault` 返回 tagged status + 5 个调用方过新 shape + 13 单元测试；同 commit 修了 `setDefaultProviderId` 静默改写 user pin 的根因 bug，加 2 个回归测试。② Models 页默认入口（`a075670` / `90e64ff`）：顶部 Auto/Pinned 状态卡 + "改回自动" + 行级 PushPin（hidden 行原子两步"启用并设为默认" + 启用步失败回滚不写默认）+ 跨 Runtime "Other Runtime only" badge。③ Runtime 页 invalid-default banner（`4824a03`）：4 个 explicit recovery CTA — 切到对面 Runtime / 去启用此模型（deep-link 带 provider+model+filter='all' + 高亮目标行）/ 选别的默认 / 改回 Auto。④ Providers 页 default selector 删除（`f33b3b1`）：净减 95 行，pointer 卡引导去 Models 页。⑤ Settings → Health 顶级页（`3dc6c74`）：5 行只读 health（providers connectivity / runtime CLI / default model validity / models exposure / workspace），复用 useOverviewData 不造平行诊断管线。⑥ 旧诊断入口收敛（`d4c16dd`）：Overview Setup-Diagnostics 卡 → Health 入口；Health 底部从"深度诊断与修复"降为"需要进一步排查？ → 去 About"；About 卡名 "诊断与维护" → "支持与日志"。⑦ 持久日志支持（`9bf5856` / `748e457` / `f00a403` / `7821313` / `f3a42ed` / `5aafa87`）：Electron `app.getPath('logs')` 下的 `codepilot-main.log`，写盘前每行过 `electron/log-sanitize.ts` 脱敏（vendor 前缀 / Bearer / URL 凭证 / Authorization / **字段名规则** 覆盖 AWS / api_key / secret / password / `$HOME` 等），17 单元测试锁住每条规则；首次升级一次性 rotate 旧未脱敏文件为 `*.unsanitized-legacy.log`，rotation 失败时本会话写到 `codepilot-main-sanitized.log` fallback 不污染 canonical；marker 仅在成功时写。**产品定位调整（用户 2026-04-29 拍板）**：旧"诊断 / 修复"承诺被弱化——*Health 是日常状态索引，不是 wizard；问题排查靠 logs + issue。* Setup Center 留作 install / wizard 入口而不是"修复一切"按钮；ProviderDoctor 留在 Providers 页作为单 provider 探测工具，但不再是头条诊断动作。**收尾验证（2026-04-29）**：`npm run test` 1268/1268；CDP 6 页（Overview / Providers / Models / Runtime / Health / About）总体扫一遍 + 1440×900 / 560×900 两组视口 + 0 console error；6 重点用户路径走通（Auto/Pinned 默认切换、隐藏模型设默认、Runtime 切换、cross-Runtime pin → invalid-default、Open log folder Web 模式正确隐藏、Health → About logs deep-link）；旧"运行诊断"假动作 CTA 全部改名为真实导航。
 - 2026-04-28: **Phase 2C 拍板：Default Model Contract + Settings → Health**。Phase 2A/2B 把 Providers / Models / Runtime 三层心智立起来了，但默认模型还跨层泄漏——存于 `settings` 表的 `global_default_model` / `global_default_model_provider`，**唯一写入点是 Providers 页**（资产页）；`resolveNewChatDefault` 不区分模式，不可达就 null + 调用方各自 fallback。结果：用户在 Providers 页设了 default，刷新 / 切 Runtime 后系统"半静默"替他跑别的，"我设了默认但系统不听"是长期 bug 的根。Phase 2C 把契约重立。**核心原则（用户 2026-04-28 拍板）**：*Pinned default is a hard promise — Auto is the only mode allowed to fallback.* `global_default_mode='pinned'` + 当前 effective Runtime 下 pinned provider/model 不可执行 → 必须曝光 invalid-default + **阻断新消息发送** 直到用户解决。chat 入口不允许为 pinned default 静默替代任何 provider/model。**6 个独立 commit**：① 2C.1 数据契约 + resolver 形状（schema migration、`resolveNewChatDefault` 返回 `{ status: 'ok' \| 'auto-resolved' \| 'invalid-default' \| 'no-compatible', provider?, model?, reason? }`、5 个调用方 + 单元测试改）；② 2C.2 Models 页成默认入口（行级"设为默认"、Auto/Pinned toggle、跨 Runtime 模型显式 badge）；③ 2C.3 Runtime 页 invalid-default banner + 4 恢复 CTA（切 Runtime / 启用模型 / 选别的默认 / 改 Auto）；④ 2C.4 Providers 页移除 default selector + "在 Models 页管理 →" 引导；⑤ 2C.5 Settings → Health 顶级页（侧栏放 Runtime 与 Usage 之间，聚合 Providers connectivity / Runtime CLI / Default-model validity / Models exposure / Workspace 5 个 section，Setup Center 仍是 wizard 模态保留）；⑥ 2C.6 旧诊断入口收敛（Overview Setup-Diagnostics 卡 → Health 入口卡，chat header 连接失败 → Health，About 仍是 Setup Center）。**4 条决策**：⒜ invalid-default 时**阻断发送**（不临时 first-compatible）— 半静默 fallback 是 bug 根源；⒝ 跨 Runtime 模型可被 Pin（用户可能在为切 Runtime 准备），但立刻进 invalid-default 可见状态，UI 写清"已固定，但当前 Runtime 不可执行"；⒞ Health 放 Runtime 与 Usage 之间（先建运行条件，再查健康，再看消耗——放 About 上面会让它退化为"维护杂项"）；⒟ 6 commit 节奏（不合并：2C.1 动契约、2C.5 动 IA，单独 review 单独回滚）。
 
 ## 事实边界
@@ -1151,6 +1153,7 @@ UI 规则:
 - 设计并实现 `session_events`。
 - 设计并实现 `context_fragments` 或同等 ledger。
 - 设计 Local Agent Adapter Registry 草案：adapter id / display name / detect command / launch command / capability flags / limitations / ownership boundary。
+- 为 Chat 的显式 `@agent` 调度预留 adapter contract：`invoke` 输入（cwd / prompt / files / session context）、输出（summary / artifacts / logs / status）、权限边界、取消 / 重试语义、以及结果如何写入 `session_events`。
 - 接入 context assembler、runtime registry、provider test、tool/permission flow、memory retrieval。
 - 写 guardrails docs 并更新 `AGENTS.md` / `CLAUDE.md` 索引。
 
@@ -1158,18 +1161,21 @@ UI 规则:
 - Run Cockpit 由结构化事件驱动。
 - context fragments 可用于调试和 UI 展示。
 - 本地 Agent adapter 有最小契约文档：候选 adapter 可以只声明 detect / launch / observe，不要求一开始支持所有工具、权限、模型和上下文 UI。
+- `@agent` 协作被定义为显式调用契约，而不是自动多 Agent 编排；外部 Agent 的结果必须能被 Run Cockpit / Health / logs 解释。
 - guardrails 能指导后续开发。
 
 ### Phase 5：长期 Agent 最小闭环
 
 任务：
 - 从通知/定时任务中选一个最小闭环。
+- 试做一个最小 `@agent` 协作闭环：主 Agent 在 Chat 中接收显式 `@codex` / `@claude-code` / `@openclaw` 调用，拉起对应 adapter 执行一个有边界的子任务，并把结构化结果回写到主会话。
 - 绑定 session/project。
 - 事件进入 `session_events`。
 - UI 只做必要入口和恢复路径。
 
 验收：
 - 用户可以让助理在任务完成或指定时间提醒。
+- 用户可以在主会话里显式把一个子任务交给另一个本地 Agent；调用过程、结果、失败原因都有可追踪记录。
 - 通知能跳回上下文。
 - 不引入新的稳定性风险。
 
@@ -1221,6 +1227,7 @@ UI 规则:
 | Luma Style 切换引发大量 UI 回归 | 影响可用性 | 只深改核心页面；非关键页面 token 对齐 |
 | Runtime 状态建模牵动旧逻辑 | 聊天链路回归 | 先只读状态和解释原因，再改行为 |
 | Local Agent adapter 范围膨胀 | Runtime 层变成多个 Agent 的完整复刻 UI | 分层适配：先 detect / launch / observe；外部 Agent 自管的模型、工具、权限不强行 UI 化 |
+| 多 Agent 协作过早自动化 | 主 Agent 误派发任务、上下文和责任归属混乱 | 第一版只支持用户显式 `@agent`；自动建议必须 preview + 用户确认；所有调用写入 `session_events` |
 | Session event schema 设计过重 | 阻塞 UI | 第一版只记录 Run Cockpit 需要的事件 |
 | Context fragment 保存敏感内容 | 隐私风险 | 默认保存 metadata，正文限制长度并脱敏 |
 | Provider 余额/用量需求被误纳入本轮 | 范围爆炸 | 本轮只做链接、状态和错误恢复，不做全 provider billing API |
@@ -1230,5 +1237,6 @@ UI 规则:
 - `Gate` 已收束为 Phase 2.5 的 SDK 路径 keyword gating 统一问题；如出现新的 Gate 含义，另开小节，不混入本术语。
 - Runtime 状态已确定同时进入 Setup Center 和 session 级展示：Setup Center 解释 runtime 健康度，Run Cockpit 解释本会话选择原因。
 - Local Agent Adapter Registry 第一批除 Claude Code / CodePilot 外是否选 Codex、OpenClaw 或自定义 command，要等 Phase 3 的 session-level Runtime switcher 跑稳后再定；当前只锁适配层抽象，不承诺具体第三方能力。
+- `@agent` 协作第一版采用显式调用，不做自动多 Agent 编排；等 adapter registry、session events、Run Cockpit 三者跑通后，再评估主 Agent 自动建议 / 自动派发的边界。
 - Long-running Agent 最小闭环优先通知还是定时任务。
 - Luma Style 是否已有完整 CSS 片段，还是需要从 shadcn preset 导出。
