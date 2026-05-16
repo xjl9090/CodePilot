@@ -5,8 +5,19 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-const dataDir = process.env.CLAUDE_GUI_DATA_DIR || path.join(os.homedir(), '.codepilot');
-const MEDIA_DIR = path.join(dataDir, '.codepilot-media');
+/**
+ * Resolve `<dataDir>/.codepilot-media` PER-CALL so test setups that
+ * override `CLAUDE_GUI_DATA_DIR` after module load still see the
+ * redirected path. Pre-fix this was a module-level const captured at
+ * import time, so any test that imported `@/lib/media-saver` before
+ * setting the env var ended up writing into the real
+ * `~/.codepilot/.codepilot-media`. The `/api/media/serve` route uses
+ * the same per-call pattern.
+ */
+function getMediaDir(): string {
+  const dataDir = process.env.CLAUDE_GUI_DATA_DIR || path.join(os.homedir(), '.codepilot');
+  return path.join(dataDir, '.codepilot-media');
+}
 
 const MIME_TO_EXT: Record<string, string> = {
   'image/png': '.png',
@@ -48,10 +59,12 @@ interface SaveMediaResult {
   mediaId: string;
 }
 
-function ensureMediaDir() {
-  if (!fs.existsSync(MEDIA_DIR)) {
-    fs.mkdirSync(MEDIA_DIR, { recursive: true });
+function ensureMediaDir(): string {
+  const mediaDir = getMediaDir();
+  if (!fs.existsSync(mediaDir)) {
+    fs.mkdirSync(mediaDir, { recursive: true });
   }
+  return mediaDir;
 }
 
 function mimeToMediaType(mimeType: string): 'image' | 'video' | 'audio' {
@@ -92,11 +105,11 @@ function insertDbRecord(opts: {
  * Writes file to ~/.codepilot/.codepilot-media/ and creates a DB record.
  */
 export function saveMediaToLibrary(block: MediaBlock, opts: SaveMediaOptions = {}): SaveMediaResult {
-  ensureMediaDir();
+  const mediaDir = ensureMediaDir();
 
   const ext = MIME_TO_EXT[block.mimeType] || '.bin';
   const filename = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`;
-  const localPath = path.join(MEDIA_DIR, filename);
+  const localPath = path.join(mediaDir, filename);
 
   const buffer = Buffer.from(block.data!, 'base64');
   fs.writeFileSync(localPath, buffer);
@@ -124,7 +137,7 @@ export function importFileToLibrary(
   filePath: string,
   opts: SaveMediaOptions & { mimeType?: string; cwd?: string } = {}
 ): SaveMediaResult {
-  ensureMediaDir();
+  const mediaDir = ensureMediaDir();
 
   // Resolve relative paths against the provided cwd (session working directory),
   // not the app process cwd which is typically the project root.
@@ -138,7 +151,7 @@ export function importFileToLibrary(
   const ext = path.extname(resolved).toLowerCase();
   const mimeType = opts.mimeType || EXT_TO_MIME[ext] || 'application/octet-stream';
   const filename = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`;
-  const destPath = path.join(MEDIA_DIR, filename);
+  const destPath = path.join(mediaDir, filename);
 
   fs.copyFileSync(resolved, destPath);
 

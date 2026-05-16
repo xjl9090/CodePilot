@@ -1,0 +1,286 @@
+/**
+ * Phase 5b smoke round 9 (2026-05-16) — Codex media import bridge.
+ *
+ * Pins the path that makes Codex `imageGeneration.savedPath` and
+ * `imageView.path` actually renderable through `/api/media/serve`:
+ *
+ *   raw FS path (/tmp/foo.webp) → materializeCodexEventMedia
+ *   → importFileToLibrary copies into ~/.codepilot/.codepilot-media
+ *   → MediaBlock.localPath rewritten to the imported path
+ *   → /api/media/serve?path=<imported> returns 200
+ *
+ * Pre-fix the mapper handed `MediaBlock.localPath` = raw Codex path
+ * straight to the chat side. `/api/media/serve` allows ONLY paths
+ * under `~/.codepilot/.codepilot-media` (directory-traversal
+ * protection), so the request 403'd and the image rendered as a
+ * broken card.
+ *
+ * Tests cover:
+ *   - savedPath outside the media dir → imported, localPath rewritten,
+ *     mediaId stamped, file actually copied to disk.
+ *   - imageView.path same.
+ *   - localPath already inside the media dir → pass through unchanged.
+ *   - data-only block (no localPath) → pass through unchanged.
+ *   - source missing → block dropped, console.warn, event still
+ *     emitted (with the surviving blocks or media undefined).
+ *   - Route-level integration: imported path is served 200 by the
+ *     /api/media/serve route handler.
+ */
+
+import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { materializeCodexEventMedia } from '@/lib/codex/media-import';
+import type { RuntimeRunEvent } from '@/lib/runtime/contract';
+
+// Minimal PNG (8x8 transparent) we drop in a temp dir as the
+// "Codex-handed-to-us" source file. importFileToLibrary needs a real
+// file on disk; this stays well under the size where copy speed
+// would matter.
+const TINY_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAFklEQVR4AWMAAQAABQABDQottAAAAABJRU5ErkJggg==';
+
+let tempDir: string;
+let originalDataDir: string | undefined;
+
+before(() => {
+  originalDataDir = process.env.CLAUDE_GUI_DATA_DIR;
+});
+
+after(() => {
+  if (originalDataDir === undefined) {
+    delete process.env.CLAUDE_GUI_DATA_DIR;
+  } else {
+    process.env.CLAUDE_GUI_DATA_DIR = originalDataDir;
+  }
+});
+
+beforeEach(() => {
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-media-import-'));
+  process.env.CLAUDE_GUI_DATA_DIR = tempDir;
+});
+
+afterEach(async () => {
+  // Close any DB handle the test opened via importFileToLibrary so
+  // the temp dir can be cleaned up.
+  try {
+    const { closeDb } = await import('../../lib/db');
+    closeDb();
+  } catch {
+    /* ignore */
+  }
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+function buildSourcePng(): string {
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-media-source-'));
+  const src = path.join(sourceDir, 'codex-out.webp');
+  fs.writeFileSync(src, Buffer.from(TINY_PNG_BASE64, 'base64'));
+  return src;
+}
+
+function makeImageGenerationEvent(localPath: string): RuntimeRunEvent {
+  return {
+    type: 'tool_completed',
+    runtimeId: 'codex_runtime',
+    sessionId: 's-1',
+    toolId: 'img-1',
+    output: { type: 'imageGeneration', id: 'img-1', result: '<base64>', savedPath: localPath },
+    media: [{ type: 'image', mimeType: 'image/webp', localPath }],
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Foreign path → imported + rewritten
+// ─────────────────────────────────────────────────────────────────────
+
+describe('materializeCodexEventMedia — Codex savedPath imported into the media library', () => {
+  it('rewrites localPath to a path under .codepilot-media and stamps a mediaId', () => {
+    const src = buildSourcePng();
+    const event = makeImageGenerationEvent(src);
+    const out = materializeCodexEventMedia(event, { sessionId: 's-1' });
+    if (out.type !== 'tool_completed') throw new Error('unreachable');
+    assert.ok(out.media && out.media.length === 1, 'media must survive the import');
+    const block = out.media![0];
+    assert.notEqual(block.localPath, src, 'localPath must NOT be the raw Codex path — that\'s what 403s through /api/media/serve');
+    assert.ok(
+      block.localPath!.startsWith(path.join(tempDir, '.codepilot-media') + path.sep),
+      `imported localPath must live under <dataDir>/.codepilot-media; got ${block.localPath}`,
+    );
+    assert.ok(block.mediaId, 'mediaId must be stamped after import');
+    assert.equal(block.mimeType, 'image/webp', 'mimeType passes through');
+    // File actually exists on disk at the new path.
+    assert.ok(fs.existsSync(block.localPath!), 'imported file must exist on disk');
+  });
+
+  it('imageView path is imported same way', () => {
+    const src = buildSourcePng();
+    const event: RuntimeRunEvent = {
+      type: 'tool_completed',
+      runtimeId: 'codex_runtime',
+      sessionId: 's-1',
+      toolId: 'view-1',
+      output: { type: 'imageView', id: 'view-1', path: src },
+      media: [{ type: 'image', mimeType: 'image/webp', localPath: src }],
+    };
+    const out = materializeCodexEventMedia(event, { sessionId: 's-1' });
+    if (out.type !== 'tool_completed') throw new Error('unreachable');
+    const block = out.media![0];
+    assert.ok(block.localPath!.startsWith(path.join(tempDir, '.codepilot-media') + path.sep));
+    assert.ok(block.mediaId);
+  });
+
+  it('block ALREADY inside .codepilot-media is passed through unchanged (no re-import)', () => {
+    // First import to get a path inside the served dir.
+    const src = buildSourcePng();
+    const firstEvent = makeImageGenerationEvent(src);
+    const firstOut = materializeCodexEventMedia(firstEvent, { sessionId: 's-1' });
+    if (firstOut.type !== 'tool_completed') throw new Error('unreachable');
+    const importedPath = firstOut.media![0].localPath!;
+    const importedMediaId = firstOut.media![0].mediaId;
+
+    // Now feed the imported block back in.
+    const secondEvent: RuntimeRunEvent = {
+      type: 'tool_completed',
+      runtimeId: 'codex_runtime',
+      sessionId: 's-1',
+      toolId: 'img-2',
+      media: [{ type: 'image', mimeType: 'image/webp', localPath: importedPath, mediaId: importedMediaId }],
+    };
+    const secondOut = materializeCodexEventMedia(secondEvent, { sessionId: 's-1' });
+    if (secondOut.type !== 'tool_completed') throw new Error('unreachable');
+    const block = secondOut.media![0];
+    assert.equal(block.localPath, importedPath, 'localPath unchanged when already in media dir');
+    assert.equal(block.mediaId, importedMediaId, 'mediaId unchanged when already in media dir');
+  });
+
+  it('data-only block (no localPath) is passed through unchanged', () => {
+    const event: RuntimeRunEvent = {
+      type: 'tool_completed',
+      runtimeId: 'codex_runtime',
+      sessionId: 's-1',
+      toolId: 'img-3',
+      media: [{ type: 'image', mimeType: 'image/png', data: TINY_PNG_BASE64 }],
+    };
+    const out = materializeCodexEventMedia(event, { sessionId: 's-1' });
+    if (out.type !== 'tool_completed') throw new Error('unreachable');
+    const block = out.media![0];
+    assert.equal(block.data, TINY_PNG_BASE64, 'inline data stays — MediaPreview renders via data: URL');
+    assert.equal(block.localPath, undefined);
+    assert.equal(block.mediaId, undefined);
+  });
+
+  it('non-tool_completed events are passed through unchanged', () => {
+    const event: RuntimeRunEvent = {
+      type: 'assistant_delta',
+      runtimeId: 'codex_runtime',
+      sessionId: 's-1',
+      text: 'hello',
+    };
+    const out = materializeCodexEventMedia(event, { sessionId: 's-1' });
+    assert.equal(out, event, 'no-media events are passed by reference (no rewrite)');
+  });
+
+  it('tool_completed without media is passed through unchanged', () => {
+    const event: RuntimeRunEvent = {
+      type: 'tool_completed',
+      runtimeId: 'codex_runtime',
+      sessionId: 's-1',
+      toolId: 'cmd-1',
+      output: 'shell output',
+    };
+    const out = materializeCodexEventMedia(event, { sessionId: 's-1' });
+    assert.equal(out, event);
+  });
+
+  it('source file missing → block dropped, console.warn fires, event survives', () => {
+    const originalWarn = console.warn;
+    const warnings: string[] = [];
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(a => String(a)).join(' '));
+    };
+    try {
+      const event = makeImageGenerationEvent('/tmp/this-file-does-not-exist-12345.png');
+      const out = materializeCodexEventMedia(event, { sessionId: 's-1' });
+      if (out.type !== 'tool_completed') throw new Error('unreachable');
+      assert.equal(out.media, undefined, 'every block failed → media field is dropped so MediaPreview skips the row');
+      // The rest of the event survives so the chat side still surfaces
+      // the structured output JSON for debugging.
+      assert.equal(out.toolId, 'img-1');
+      assert.ok(
+        warnings.some(w => w.includes('codex.media-import') && w.includes('this-file-does-not-exist')),
+        `failure must emit a console.warn naming the source path; got: ${JSON.stringify(warnings)}`,
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+  });
+
+  it('partial failure: one block fails, one succeeds → survivor kept', () => {
+    const originalWarn = console.warn;
+    const stub = () => {};
+    console.warn = stub;
+    try {
+      const goodSrc = buildSourcePng();
+      const event: RuntimeRunEvent = {
+        type: 'tool_completed',
+        runtimeId: 'codex_runtime',
+        sessionId: 's-1',
+        toolId: 'mix-1',
+        media: [
+          { type: 'image', mimeType: 'image/webp', localPath: '/tmp/nope-missing-x.png' },
+          { type: 'image', mimeType: 'image/webp', localPath: goodSrc },
+        ],
+      };
+      const out = materializeCodexEventMedia(event, { sessionId: 's-1' });
+      if (out.type !== 'tool_completed') throw new Error('unreachable');
+      assert.equal(out.media?.length, 1, 'only the successful import survives');
+      assert.ok(out.media![0].localPath!.startsWith(path.join(tempDir, '.codepilot-media') + path.sep));
+    } finally {
+      console.warn = originalWarn;
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Route-level integration — /api/media/serve must accept the import
+// ─────────────────────────────────────────────────────────────────────
+
+describe('imported MediaBlock.localPath is accepted by /api/media/serve', () => {
+  it('GET /api/media/serve?path=<imported> returns 200 with the file body', async () => {
+    const src = buildSourcePng();
+    const event = makeImageGenerationEvent(src);
+    const out = materializeCodexEventMedia(event, { sessionId: 's-1' });
+    if (out.type !== 'tool_completed') throw new Error('unreachable');
+    const importedPath = out.media![0].localPath!;
+
+    // Invoke the route handler directly. Mirrors how
+    // codex-phase-6-wiring.test.ts exercises the providers/models
+    // route — same NextRequest pattern.
+    const { GET } = await import('@/app/api/media/serve/route');
+    const { NextRequest } = await import('next/server');
+    const url = `http://test.local/api/media/serve?path=${encodeURIComponent(importedPath)}`;
+    const req = new NextRequest(url);
+    const res = await GET(req);
+    assert.equal(res.status, 200, 'imported path MUST be served — that\'s the whole point of the import bridge');
+    assert.equal(res.headers.get('Content-Type'), 'image/webp');
+    const body = await res.arrayBuffer();
+    assert.ok(body.byteLength > 0, 'response carries the file bytes');
+  });
+
+  it('GET /api/media/serve refuses the RAW Codex path (regression guard for the pre-fix behaviour)', async () => {
+    // This is the failure mode the import bridge fixes: the chat side
+    // would request the raw path and hit 403. Pin it so a future
+    // "let's broaden the serve route" diff doesn't reintroduce the
+    // sandbox escape.
+    const src = buildSourcePng();
+    const { GET } = await import('@/app/api/media/serve/route');
+    const { NextRequest } = await import('next/server');
+    const url = `http://test.local/api/media/serve?path=${encodeURIComponent(src)}`;
+    const req = new NextRequest(url);
+    const res = await GET(req);
+    assert.equal(res.status, 403, 'paths outside .codepilot-media MUST 403; serve route is the security boundary');
+  });
+});

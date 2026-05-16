@@ -43,6 +43,7 @@ import {
   translateCodexNotification,
   synthesizeFileChangedFromCompletedItem,
 } from './event-mapper';
+import { materializeCodexEventMedia } from './media-import';
 import { handleCodexApprovalRequest } from './approval-bridge';
 import {
   buildCodexThreadParams,
@@ -392,7 +393,17 @@ export const codexRuntime: AgentRuntime = {
           // unknown methods actually reach the chat surface as
           // `unknown_item` blocks instead of vanishing.
           const unsubAny = client.onAnyNotification((method, params) => {
-            const event = translateCodexNotification(method, params, { sessionId });
+            const rawEvent = translateCodexNotification(method, params, { sessionId });
+            // Phase 5b smoke round 9 (2026-05-16) — materialise MediaBlocks
+            // before SSE encoding. Codex hands us raw paths like
+            // /tmp/codex-out.png; /api/media/serve only allows
+            // .codepilot-media. The import step copies the file into
+            // the served directory and rewrites localPath so
+            // MediaPreview can fetch it. No-op for non-image events
+            // or already-imported blocks.
+            const event = rawEvent
+              ? materializeCodexEventMedia(rawEvent, { sessionId, cwd: options.workingDirectory })
+              : null;
             if (event) {
               tryEnqueue(canonicalToSseLine(event));
             }
