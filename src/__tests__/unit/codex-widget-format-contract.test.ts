@@ -116,25 +116,35 @@ describe('Widget guidance forbids the image-gen tool while building a widget', (
     assert.match(WIDGET_SYSTEM_PROMPT, /(?:\*\*)?do\s+NOT(?:\*\*)?\s+call/i);
   });
 
-  it('Codex bridge WIDGET_PROMPT matches the same rule (source pin)', () => {
-    // The bridge's WIDGET_PROMPT is what GLM/Kimi see — has to
-    // carry the same constraint. Source-pin instead of importing
-    // the unexported constant.
-    //
-    // The source file literal escapes backticks (`\\\``) inside the
-    // template literal, so a regex looking for raw ``` won't match
-    // the source text. Pin on the unambiguous substrings instead:
-    // `show-widget`, the `widget_code` shape, and the negative rule.
+  it('Codex bridge WIDGET_PROMPT matches the same rule (canonical consumption)', () => {
+    // Phase 5c slice 7 (2026-05-16) — bridge no longer carries its
+    // own paraphrased widget prompt. It consumes the canonical
+    // WIDGET_SYSTEM_PROMPT from widget-guidelines.ts verbatim. The
+    // strong drift test in harness-capability-contract.test.ts
+    // pins this import + assignment shape. Here we just re-confirm
+    // the runtime mount surface sees the canonical rules.
     const bridgeSrc = fs.readFileSync(
       path.resolve(__dirname, '../../lib/codex/proxy/builtin-bridge.ts'),
       'utf-8',
     );
-    assert.match(bridgeSrc, /codepilot_generate_image/);
-    assert.match(bridgeSrc, /do NOT call .*codepilot_generate_image/i);
-    // Cross-pin: the bridge's WIDGET_PROMPT also embeds the wire
-    // format shape so it doesn't drift from WIDGET_WIRE_FORMAT_SPEC.
-    assert.match(bridgeSrc, /show-widget/);
-    assert.match(bridgeSrc, /widget_code.*JSON-encoded string|JSON-encoded string.*widget_code/i);
+    // Bridge MUST import the canonical and assign WIDGET_PROMPT to
+    // the import directly (not via concatenation).
+    assert.match(bridgeSrc, /import\s*\{[^}]*WIDGET_SYSTEM_PROMPT[^}]*\}\s*from\s*'@\/lib\/widget-guidelines'/);
+    assert.match(bridgeSrc, /const\s+WIDGET_PROMPT\s*=\s*CANONICAL_WIDGET_SYSTEM_PROMPT\s*;/);
+    // Cross-pin on the canonical source: the canonical prompt must
+    // carry the show-widget format declaration + image-gen rule.
+    // If anyone weakens the canonical, this fires.
+    const canonicalSrc = fs.readFileSync(
+      path.resolve(__dirname, '../../lib/widget-guidelines.ts'),
+      'utf-8',
+    );
+    assert.match(canonicalSrc, /codepilot_generate_image/);
+    // Canonical prompt wraps "do NOT" in bold (`**do NOT**`); allow
+    // optional `**` anchors on either side so the rule can read as
+    // either bold or plain in future rewordings without dropping
+    // the substantive constraint.
+    assert.match(canonicalSrc, /(?:\*\*)?do\s+NOT(?:\*\*)?\s+call/i);
+    assert.match(canonicalSrc, /show-widget/);
   });
 });
 

@@ -95,7 +95,13 @@ describe('createCodePilotBuiltinTools — mount + skip', () => {
       workspacePath: '/w',
     });
     assert.match(bridge.systemPrompt, /codepilot-media-capability/);
-    assert.match(bridge.systemPrompt, /codepilot-widget-capability/);
+    // Phase 5c slice 7 (2026-05-16) — bridge widget prompt now is
+    // the canonical WIDGET_SYSTEM_PROMPT verbatim, which uses the
+    // tag `<widget-capability>` (no codepilot- prefix). Media /
+    // tasks / memory still carry the bridge-side codepilot- tag
+    // because those prompts haven't been de-drifted yet (tech-debt
+    // tracked in the Harness Capability Contract).
+    assert.match(bridge.systemPrompt, /widget-capability/);
     assert.match(bridge.systemPrompt, /codepilot-tasks-capability/);
     assert.match(bridge.systemPrompt, /codepilot-memory-capability/);
   });

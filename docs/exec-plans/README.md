@@ -80,6 +80,7 @@
 | [active/refactor-closeout.md](active/refactor-closeout.md) | **重构收口总控板**：当前 Phase 状态 / 下一步 / 未闭环风险 / 验收入口 / 最近决策 / Phase 4-7 方案 | Phase 0-4 ✅；Phase 5 核心链路 ✅；Phase 5b 翻译层 + 真实 proxy 注入已落地，等三类家族真实 chat smoke 完成才能 ✅ |
 | [active/phase-5-codex-runtime.md](active/phase-5-codex-runtime.md) | **Phase 5 Codex Runtime 接入**：Runtime Contract Hardening / Codex app-server / account + model sync / Runtime adapter / 原生工具事件 / provider proxy scaffold / Codex UI 收口 / Phase 5b proxy translator | 核心链路、UI 收口 ✅；Phase 5b translator + Codex thread/start 真实 proxy 注入已落地，待真实 credential chat smoke 收口 |
 | [active/phase-5c-codex-tool-bridge.md](active/phase-5c-codex-tool-bridge.md) | **Phase 5c CodePilot Tool Bridge 执行子计划**：parse-request 分类 / proxy 头扩展 / 侧通道事件总线 / builtin-bridge 工具集 / unified-adapter 集成 / translate-stream 抑制 / runtime 订阅 / 反模式 source-grep 守卫 | 实现 + 单测 + 文档 ✅（2026-05-16，2495 tests pass），待用户跑 6 类能力族真实 smoke 收口 |
+| [active/phase-5d-harness-capability-contract.md](active/phase-5d-harness-capability-contract.md) | **Phase 5d Harness Capability Contract / 新 Runtime 接入规范**：把 Memory / Tasks / Widget / Media / Notify / Dashboard / CLI 等 CodePilot 自有能力抽成跨 Runtime contract，沉淀 Codex 接入教训，作为 Hermes 等未来 Agent 接入 playbook | 🔄 计划已创建；ClaudeCode 当前 5c slice 可继续执行，5d 负责事实审计、能力矩阵、Context Compiler、Artifact Contract 与新 Runtime 接入规范 |
 | [active/issue-tracker.md](active/issue-tracker.md) | **统一问题跟踪**：所有 Bug / Feature Request / Sentry 监控的活动看板 | 持续维护 |
 
 ### 被 refactor-closeout 接管（保留作历史参考）

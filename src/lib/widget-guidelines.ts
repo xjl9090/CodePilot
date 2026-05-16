@@ -15,12 +15,32 @@ import { z } from 'zod';
 // ── System prompt (always injected — minimal version) ───────────────────────
 
 /**
+ * Canonical show-widget JSON example, separated from the surrounding
+ * prose so contract tests can `JSON.parse` it directly and feed it
+ * into `parseAllShowWidgets` to verify the renderer accepts it.
+ *
+ * Phase 5c slice 7 (2026-05-16) — replaced slice 6's `\\\\"`
+ * double-escaped attribute form. JSON.parse on a string containing
+ * `\\\\\"` terminates the JSON string early and rejects the rest;
+ * the model copying the example verbatim produced unparseable JSON.
+ * Switching HTML attribute quoting to single quotes eliminates the
+ * embedded double-quote entirely, so the example is true valid JSON
+ * the model can copy without escape-counting.
+ *
+ * If a future widget genuinely needs double-quote HTML attrs, the
+ * model must emit one backslash (`\\"`), never two (`\\\"`). The
+ * contract test for malformed handling pins both forms.
+ */
+export const CANONICAL_SHOW_WIDGET_JSON =
+  '{"title":"Hello","widget_code":"<div style=\'padding:8px;font:14px var(--font-sans)\'>Hello world</div>"}';
+
+/**
  * Wire format spec referenced by the system prompt, the on-demand
  * guidelines tool, the bridge prompt, and the contract test in
- * `codex-widget-format-contract.test.ts`. Single source of truth —
- * any drift between them is the kind of "model returns raw HTML
- * fence instead of JSON wrapper" failure mode the post-smoke S4
- * scenario surfaced.
+ * `codex-widget-format-contract.test.ts` + `harness-capability-contract.test.ts`.
+ * Single source of truth — any drift between them is the kind of
+ * "model returns raw HTML fence instead of JSON wrapper" failure
+ * mode the post-smoke S4 scenario surfaced.
  *
  * The MINIMAL EXAMPLE intentionally uses an absurdly small HTML
  * snippet so the model can't confuse it with the design-system
@@ -34,15 +54,17 @@ The ONLY way to render a widget is a code fence labelled \`show-widget\` whose b
 {"title":"<human-readable title>","widget_code":"<escaped HTML/SVG string>"}
 \`\`\`
 
-- \`widget_code\` is a **JSON-encoded string**, not raw HTML. Escape quotes (\`\\\\"\`), newlines (\`\\\\n\`), and backslashes.
+- \`widget_code\` is a **JSON-encoded string**, not raw HTML. Prefer **single-quote** HTML attributes (\`<div style='...'>\`) so the JSON body never needs to escape double quotes — copy/paste-safe.
+- If you absolutely need double-quote HTML attributes inside \`widget_code\`, use **one** backslash (\`\\\\\"\`) — never two. Two-backslash escapes (\`\\\\\\\\\"\`) terminate the JSON string and break the widget.
+- Escape newlines as \`\\\\n\` and backslashes as \`\\\\\\\\\` inside the JSON string.
 - A raw HTML fence (\`\`\`html …\`\`\`) is NEVER rendered as a widget.
 - A \`show-widget\` fence whose body is HTML (not JSON) is NEVER rendered as a widget — the UI surfaces a "malformed widget" error block.
 - Any HTML example shown later in the design guidelines goes **inside** \`widget_code\`. It is not the wire format.
 
-Minimal correct example (use as a structural template, NOT a copy target):
+Minimal correct example — copy/paste-safe JSON (verified by contract test):
 
 \`\`\`show-widget
-{"title":"Hello","widget_code":"<div style=\\\\"padding:8px;font:14px var(--font-sans)\\\\">Hello world</div>"}
+${CANONICAL_SHOW_WIDGET_JSON}
 \`\`\``;
 
 export const WIDGET_SYSTEM_PROMPT = `<widget-capability>

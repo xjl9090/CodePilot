@@ -52,6 +52,7 @@ import type { MediaBlock } from '@/types';
 import { makeToolStarted, makeToolCompleted } from '@/lib/runtime/event-adapter';
 import { emitBuiltinEvent } from './builtin-event-bus';
 import { materializeCodexEventMedia } from '@/lib/codex/media-import';
+import { WIDGET_SYSTEM_PROMPT as CANONICAL_WIDGET_SYSTEM_PROMPT } from '@/lib/widget-guidelines';
 
 /** Tool names this bridge owns. The unified adapter passes this set
  *  to `translate-stream.ts` so its tool-call / tool-result events
@@ -650,21 +651,19 @@ function truncate(s: string, max: number): string {
 // Widget guidelines
 // ─────────────────────────────────────────────────────────────────────
 
-const WIDGET_PROMPT = `<codepilot-widget-capability>
-You can create interactive visualisations using the \`show-widget\` code fence.
-
-WIRE FORMAT (non-negotiable):
-\`\`\`show-widget
-{"title":"<human-readable title>","widget_code":"<escaped HTML/SVG string>"}
-\`\`\`
-- \`widget_code\` is a JSON-encoded string — escape quotes, newlines, backslashes.
-- A raw HTML fence (\`\`\`html …\`\`\`) is NEVER a widget.
-- A \`show-widget\` fence whose body is HTML instead of JSON is NEVER rendered as a widget — the UI surfaces a malformed-widget error.
-
-Before generating your first widget in this conversation, call \`codepilot_load_widget_guidelines\` with the relevant modules (interactive / chart / mockup / art / diagram) to load the detailed design specs. The HTML/SVG examples in those guidelines go INSIDE \`widget_code\`; they are not themselves the wire format.
-
-While building a widget, do NOT call \`codepilot_generate_image\` (or any other image-generation tool) unless the user explicitly asked for a separate generated image. Widgets render HTML/SVG inside \`widget_code\`; they do not embed generated images.
-</codepilot-widget-capability>`;
+/**
+ * Phase 5c slice 7 (2026-05-16) — bridge widget prompt now consumes
+ * the canonical `WIDGET_SYSTEM_PROMPT` from `src/lib/widget-guidelines.ts`
+ * verbatim, no Codex-specific rewording. The Harness Capability
+ * Contract names that file as the authoritative source; Codex bridge
+ * MUST NOT redefine widget semantics, only carry them.
+ *
+ * Slice 6's standalone WIDGET_PROMPT was paraphrasing the same rules
+ * differently from the canonical, which is the exact drift pattern
+ * the contract is designed to prevent. The drift test in
+ * `harness-capability-contract.test.ts` pins this assignment.
+ */
+const WIDGET_PROMPT = CANONICAL_WIDGET_SYSTEM_PROMPT;
 
 interface WidgetInput {
   modules: Array<'interactive' | 'chart' | 'mockup' | 'art' | 'diagram'>;

@@ -1,27 +1,23 @@
 /**
- * builtin-tools/widget-guidelines.ts — Widget design guidelines tool (shared).
+ * builtin-tools/widget-guidelines.ts — Widget design guidelines tool (Native Runtime).
  *
- * Provides the codepilot_load_widget_guidelines tool for loading
- * design system guidelines when generating visual widgets.
+ * Phase 5c slice 7 (2026-05-16) — system prompt is now re-exported
+ * from the canonical source in `src/lib/widget-guidelines.ts`
+ * instead of carrying a separate (drifted) copy. Pre-fix this file
+ * had a 14-line abridged prompt that didn't mention the
+ * WIDGET_WIRE_FORMAT_SPEC + image-gen rule slice 6 added, so the
+ * Native Runtime path silently disagreed with the ClaudeCode SDK
+ * path on what a valid widget looks like. The Harness Capability
+ * Contract (`src/lib/harness/capability-contract.ts`) declares
+ * `src/lib/widget-guidelines.ts` as the authoritative prompt
+ * source — this file consumes it.
  */
 
 import { tool } from 'ai';
 import { z } from 'zod';
+import { WIDGET_SYSTEM_PROMPT as CANONICAL_WIDGET_SYSTEM_PROMPT } from '@/lib/widget-guidelines';
 
-export const WIDGET_SYSTEM_PROMPT = `<widget-capability>
-You can create interactive visualizations using the \`show-widget\` code fence.
-
-## Format
-\`\`\`show-widget
-{"title":"snake_case_id","widget_code":"<raw HTML/SVG string>"}
-\`\`\`
-
-## Design Principles
-- Use pure HTML/SVG/CSS. No external frameworks.
-- All code in a single string (inline styles, inline scripts).
-- Support dark/light themes via CSS variables.
-- Use codepilot_load_widget_guidelines for detailed design specifications.
-</widget-capability>`;
+export const WIDGET_SYSTEM_PROMPT = CANONICAL_WIDGET_SYSTEM_PROMPT;
 
 export function createWidgetGuidelinesTools() {
   return {
