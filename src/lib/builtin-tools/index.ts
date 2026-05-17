@@ -47,27 +47,52 @@ export interface GetBuiltinToolsOptions {
 }
 
 /**
- * Map a builtin-tool group `name` to the capability id from
+ * Map a builtin-tool group `name` to the capability ids from
  * `src/lib/harness/capability-contract.ts`. Drives the
- * enabledCapabilities set the compiler consumes when this function
+ * `enabledCapabilities` set the compiler consumes when this function
  * decides a group is active.
+ *
+ * Returns an array because one group can mount tools that belong to
+ * multiple capabilities (e.g. `codepilot-media` mounts both
+ * `codepilot_import_media` → media_import AND
+ * `codepilot_generate_image` → image_generation). The compiler then
+ * emits fragments + tool descriptors for every returned id.
+ *
+ * Empty array = the group is not capability-tracked yet (Phase 4
+ * candidates like session-search / ask-user-question whose prompts
+ * haven't earned a capability contract entry).
  */
-function capabilityIdForGroup(groupName: string): string | null {
+function capabilityIdsForGroup(groupName: string): readonly string[] {
   switch (groupName) {
-    case 'codepilot-notify': return 'tasks_and_notify';
-    case 'codepilot-memory': return 'memory';
-    case 'codepilot-widget-guidelines': return 'widget';
-    case 'codepilot-dashboard': return 'dashboard';
-    case 'codepilot-media': return 'media_import';
-    case 'codepilot-cli-tools': return 'cli_tools';
+    case 'codepilot-notify':
+      return ['tasks_and_notify'];
+    case 'codepilot-memory':
+      return ['memory'];
+    case 'codepilot-widget-guidelines':
+      return ['widget'];
+    case 'codepilot-dashboard':
+      return ['dashboard'];
+    case 'codepilot-media':
+      // Phase 5d Phase 2 P1 fix (2026-05-17) — pre-fix this returned
+      // only 'media_import' but the underlying `createMediaTools()`
+      // mounts BOTH the import tool AND `codepilot_generate_image`.
+      // That meant the compiler's enabledCapabilities / toolDescriptors
+      // / future runtimeHints.native.toolSetKeys never knew about
+      // image_generation on the Native runtime even though the tool
+      // was registered and callable. Returning both keeps the
+      // compiler contract aligned with what Native actually exposes.
+      return ['media_import', 'image_generation'];
+    case 'codepilot-cli-tools':
+      return ['cli_tools'];
     case 'codepilot-session-search':
     case 'codepilot-ask-user':
-      // Native-only groups without a capability contract entry yet
-      // (Phase 4 candidates). Their per-group `systemPrompt` was
-      // never canonicalised; we surface them as a separate prompts
-      // array so the caller can decide whether to keep them.
-      return null;
-    default: return null;
+      // Native-only groups without a capability contract entry yet.
+      // Their per-group `systemPrompt` was never canonicalised; the
+      // caller (getBuiltinTools) routes them into `nonCapabilityPrompts`
+      // so they don't disappear during Phase 2.
+      return [];
+    default:
+      return [];
   }
 }
 
@@ -105,9 +130,9 @@ export function getBuiltinTools(
     }
 
     Object.assign(tools, group.tools);
-    const capId = capabilityIdForGroup(group.name);
-    if (capId) {
-      enabledCapabilities.add(capId);
+    const capIds = capabilityIdsForGroup(group.name);
+    if (capIds.length > 0) {
+      for (const id of capIds) enabledCapabilities.add(id);
     } else if (group.systemPrompt) {
       // Non-capability group whose prompt hasn't been canonicalised
       // yet (session-search / ask-user-question). Keep its raw

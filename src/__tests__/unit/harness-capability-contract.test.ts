@@ -288,8 +288,8 @@ describe('Codex bridge prompt does not redefine widget semantics', () => {
     );
     assert.match(
       indexSrc,
-      /capabilityIdForGroup/,
-      'builtin-tools/index.ts must declare capabilityIdForGroup mapping (group name → capability id)',
+      /capabilityIdsForGroup/,
+      'builtin-tools/index.ts must declare capabilityIdsForGroup mapping (group name → list of capability ids)',
     );
     assert.match(
       indexSrc,
@@ -300,6 +300,121 @@ describe('Codex bridge prompt does not redefine widget semantics', () => {
       indexSrc,
       /compiled\.systemPromptText/,
       'getBuiltinTools must consume compiled.systemPromptText for the capability prompt slot',
+    );
+  });
+
+  it('codepilot-media group maps to BOTH media_import and image_generation capabilities (slice 2d P1 fix)', () => {
+    // Phase 5d Phase 2 P1 fix (2026-05-17) — `createMediaTools()`
+    // mounts `codepilot_import_media` (media_import) AND
+    // `codepilot_generate_image` (image_generation). Pre-fix the
+    // builtin-tools/index.ts capability map only listed
+    // media_import; the compiler then thought image_generation was
+    // not active on Native, even though the tool was actually
+    // callable. Source-pin the new multi-capability mapping.
+    const indexSrc = readSource('src/lib/builtin-tools/index.ts');
+    // Find the `case 'codepilot-media':` arm and confirm both
+    // capability ids appear within its return list. The window is
+    // widened to 1500 chars because the slice-2d P1 fix landed a
+    // long explanatory comment between the case label and the
+    // return statement.
+    const arm = indexSrc.match(/case 'codepilot-media':[\s\S]{0,1500}?return\s*\[([^\]]*)\]/);
+    assert.ok(arm, 'capabilityIdsForGroup must have a `codepilot-media` arm that returns an array');
+    const ids = arm![1];
+    assert.match(ids, /'media_import'/, 'codepilot-media must include media_import');
+    assert.match(ids, /'image_generation'/, 'codepilot-media must include image_generation — createMediaTools mounts the codepilot_generate_image tool too');
+  });
+
+  it('Native getBuiltinTools — codepilot_generate_image present implies image_generation in compiled toolDescriptors (runtime check)', async () => {
+    // Live runtime check via the compiler: when Native gates in the
+    // codepilot-media group (always-on per builtin-tools/index.ts)
+    // the compiler MUST emit a toolDescriptor for
+    // codepilot_generate_image. Pre-P1-fix this assertion failed
+    // because the group was only marked `media_import`.
+    const { compileContext } = await import('@/lib/harness/context-compiler');
+    const compiled = compileContext({
+      sessionId: 'native-test',
+      workingDirectory: '/tmp/native-test',
+      runtimeId: 'codepilot_runtime',
+      providerId: '',
+      model: '',
+      userPrompt: '',
+      enabledCapabilities: new Set(['media_import', 'image_generation']),
+      tokenBudget: { systemPromptMax: 100_000, contextMax: 200_000 },
+    });
+    const names = new Set(compiled.toolDescriptors.map((t) => t.name));
+    assert.ok(
+      names.has('codepilot_generate_image'),
+      'compiler must emit codepilot_generate_image toolDescriptor when image_generation is enabled',
+    );
+    assert.ok(
+      names.has('codepilot_import_media'),
+      'compiler must emit codepilot_import_media toolDescriptor when media_import is enabled',
+    );
+  });
+});
+
+describe('Capability prompts inject WITHOUT a base systemPrompt (P1 fix, 2026-05-17)', () => {
+  it('Native: agent-loop.ts effectiveSystemPrompt joins tool prompts even when base systemPrompt is empty', () => {
+    // Pre-fix source had:
+    //   `toolSystemPrompts.length > 0 && systemPrompt
+    //     ? systemPrompt + ... : systemPrompt`
+    // which dropped toolSystemPrompts whenever systemPrompt was
+    // falsy. Source-pin the new shape (filter(Boolean).join).
+    const src = readSource('src/lib/agent-loop.ts');
+    // The new combining expression must contain `.filter(Boolean)`
+    // applied to an array that includes both systemPrompt and
+    // toolSystemPrompts.
+    assert.match(
+      src,
+      /\[\s*systemPrompt\s*,\s*\.\.\.toolSystemPrompts\s*\]\.filter\(Boolean\)\.join/,
+      'agent-loop.ts must compose effectiveSystemPrompt via [systemPrompt, ...toolSystemPrompts].filter(Boolean).join — drops nothing when one side is empty',
+    );
+    // Negative: the broken pre-fix shape must be gone.
+    assert.equal(
+      /toolSystemPrompts\.length\s*>\s*0\s*&&\s*systemPrompt\s*\?\s*systemPrompt\s*\+/.test(src),
+      false,
+      'agent-loop.ts must not use the pre-fix conditional that dropped tool prompts when base systemPrompt was empty',
+    );
+  });
+
+  it('ClaudeCode: claude-client.ts initialises queryOptions.systemPrompt with preset shape when enabledCapabilities is non-empty', () => {
+    // Pre-fix the compileContext block was guarded by
+    // `&& queryOptions.systemPrompt && typeof ... === 'object'`. If
+    // the caller didn't pass a base systemPrompt, queryOptions.
+    // systemPrompt was undefined and the compiled prompt was
+    // silently dropped. Pin the new fallback branch that mounts
+    // the SDK preset shape on demand.
+    const src = readSource('src/lib/claude-client.ts');
+    assert.match(
+      src,
+      /if\s*\(enabledCapabilities\.size\s*>\s*0\)\s*\{/,
+      'claude-client.ts must enter the compileContext block whenever enabledCapabilities is non-empty (not only when systemPrompt exists)',
+    );
+    assert.match(
+      src,
+      /queryOptions\.systemPrompt\s*=\s*\{\s*[\s\S]*?type:\s*['"]preset['"][\s\S]*?preset:\s*['"]claude_code['"][\s\S]*?append:\s*compiled\.systemPromptText/,
+      'claude-client.ts must initialise queryOptions.systemPrompt with the Claude Code preset shape when none was provided',
+    );
+  });
+
+  it('Native runtime: getBuiltinTools returns the compiler-produced systemPrompt[0] even when caller passes no prompt', async () => {
+    // Live runtime check. getBuiltinTools is the Native-side entry
+    // — its return value is used as `toolSystemPrompts` in
+    // agent-loop.ts. With workspacePath provided but no userPrompt,
+    // tasks_and_notify (always-on, always-mounted) should still
+    // produce a capability prompt — proving the path from group
+    // gating through compileContext returns a non-empty fragment
+    // independent of base prompt presence.
+    const { getBuiltinTools } = await import('@/lib/builtin-tools');
+    const { tools, systemPrompts } = getBuiltinTools({
+      workspacePath: '/tmp/test',
+      prompt: '',
+    });
+    assert.ok(Object.keys(tools).length > 0, 'getBuiltinTools must mount at least one tool (notify is always-on)');
+    assert.ok(systemPrompts.length > 0, 'getBuiltinTools must return a non-empty systemPrompts array');
+    assert.ok(
+      systemPrompts[0].length > 0,
+      'compiler-produced systemPrompts[0] must be non-empty when at least one capability is gated in',
     );
   });
 });

@@ -163,11 +163,23 @@ export function runAgentLoop(options: AgentLoopOptions): ReadableStream<string> 
           toolSystemPrompts = assembled.systemPrompts;
         }
 
-        // Augment system prompt with tool-specific context snippets
-        // (notification hints, media capabilities, dashboard usage, etc.)
-        const effectiveSystemPrompt = toolSystemPrompts.length > 0 && systemPrompt
-          ? systemPrompt + '\n\n' + toolSystemPrompts.join('\n\n')
-          : systemPrompt;
+        // Phase 5d Phase 2 P1 fix (2026-05-17) — augment system
+        // prompt with tool-specific context snippets EVEN WHEN no
+        // base systemPrompt was provided. The compiler-produced
+        // tool prompts are how the model learns about capability
+        // surfaces (codepilot_load_widget_guidelines, the wire
+        // format spec, image-gen / memory / tasks rules, etc.). If
+        // the upstream caller didn't pass a base systemPrompt, we
+        // STILL need to inject the capability prompts — they're a
+        // contract the bridge layer ships, not optional decoration.
+        //
+        // Pre-fix: `length > 0 && systemPrompt ? join : systemPrompt`
+        // silently dropped toolSystemPrompts whenever the base was
+        // empty. Now both halves combine through filter(Boolean) so
+        // either side can be empty without losing the other.
+        const effectiveSystemPrompt =
+          [systemPrompt, ...toolSystemPrompts].filter(Boolean).join('\n\n') ||
+          undefined;
 
         // 1. Create model
         const { languageModel, modelId, config, isThirdPartyProxy } = createModel({

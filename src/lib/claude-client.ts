@@ -1032,13 +1032,20 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
           enabledCapabilities.add('dashboard');
         }
 
-        // Phase 5d Phase 2 slice 2c (2026-05-17) — single compileContext
-        // call producing the canonical, ordered, de-duplicated
-        // capability system prompt for everything mounted above.
-        // Replaces the previous per-capability `+ _SYSTEM_PROMPT`
-        // appends. claude-client.ts is now a pure consumer of the
-        // compiler output.
-        if (enabledCapabilities.size > 0 && queryOptions.systemPrompt && typeof queryOptions.systemPrompt === 'object' && 'append' in queryOptions.systemPrompt) {
+        // Phase 5d Phase 2 slice 2c + P1 fix (2026-05-17) — single
+        // compileContext call producing the canonical, ordered, de-
+        // duplicated capability system prompt for everything mounted
+        // above. Replaces per-capability `+ _SYSTEM_PROMPT` appends.
+        //
+        // P1 fix: the compiler prompt MUST be injected even when the
+        // upstream caller did not provide a base `systemPrompt`. Pre-
+        // fix we required `queryOptions.systemPrompt` to already
+        // exist (which only happens when the caller passed
+        // `params.system`); if a chat run had MCP tools mounted but
+        // no base prompt, the model never saw the capability rules.
+        // Now we initialise `queryOptions.systemPrompt` with the
+        // canonical preset shape so the append always lands.
+        if (enabledCapabilities.size > 0) {
           const { compileContext } = await import('@/lib/harness/context-compiler');
           const compiled = compileContext({
             sessionId,
@@ -1051,7 +1058,26 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
             tokenBudget: { systemPromptMax: 100_000, contextMax: 200_000 },
           });
           if (compiled.systemPromptText.length > 0) {
-            queryOptions.systemPrompt.append = (queryOptions.systemPrompt.append || '') + '\n\n' + compiled.systemPromptText;
+            if (
+              queryOptions.systemPrompt &&
+              typeof queryOptions.systemPrompt === 'object' &&
+              'append' in queryOptions.systemPrompt
+            ) {
+              queryOptions.systemPrompt.append =
+                (queryOptions.systemPrompt.append || '') +
+                '\n\n' +
+                compiled.systemPromptText;
+            } else {
+              // No upstream systemPrompt. Mount the SDK's preset
+              // shape with the compiled capability prompt in the
+              // append slot — keeps Claude Code's default preset
+              // intact while still injecting our capability rules.
+              queryOptions.systemPrompt = {
+                type: 'preset',
+                preset: 'claude_code',
+                append: compiled.systemPromptText,
+              };
+            }
           }
         }
 
