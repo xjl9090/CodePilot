@@ -1,6 +1,6 @@
 # Refactor Closeout / 重构收口计划（总控板）
 
-> 创建：2026-05-06 · 最后更新：2026-05-16（Phase 0-4 已完成并归档；Phase 5 核心链路已落地；Phase 5b provider proxy 翻译层已落地但 smoke 未完；Phase 5c CodePilot Tool Bridge 实现 + 单测 + 文档已落地，2495 tests pass，**待用户跑 6 类能力族真实 smoke 收口**）
+> 创建：2026-05-06 · 最后更新：2026-05-18（Phase 0-4 已完成并归档；Phase 5 核心链路已落地；Phase 5e Runtime Harness Architecture 已完成并归档，2870 tests pass；Phase 5b provider proxy 仍需真实 credential smoke 才能最终 ✅）
 > 这是日常入口；查历史细节请走"历史归档"列（`completed/refactor-phase-*.md` + `completed/phase-4-markdown-artifact.md`），不要在本文件里翻 1000 行决策日志。
 > **协作边界**：Codex 负责计划制定、方案审查和 Review；ClaudeCode 负责执行代码改动、测试和提交整理。除非用户明确重新授权，Codex 只能改 `docs/` 下的计划 / 交接 / review 文档，不再直接改业务代码。
 > **上下文同步纪律**：交给 ClaudeCode 的内容不能只给"最终结论"或任务清单，必须同时写清楚讨论过程、判断依据、被否掉的方案和为什么否掉。尤其是架构 / Runtime / 权限 / provider / 安全边界相关任务，Codex 的交接文案需要包含：用户原始诉求 → 中间争议 → 取舍理由 → 当前决定 → 不做边界 → 审查重点。这样 ClaudeCode 重启或上下文较短时，也能继承判断过程，而不是重新踩同一个坑。
@@ -14,9 +14,9 @@
 | 2 | Runtime 与会话执行 | 每个会话能解释 / 能切换"执行引擎"；旧会话不被全局漂移；下一条消息生效 | ✅ Step 1-4c 全部完成（2026-05-07） | [phase-2](../completed/refactor-phase-2-runtime-session.md) |
 | 3 | 后台常驻、全局定时任务、助理心跳与通知 | 关窗常驻菜单栏；reminder 不依赖 AI；本机通知 / Bridge 解耦；全局任务页；后台 Agent 任务 + 后台心跳 | ✅ 全部完成（2026-05-10）：Step 1-3 + IA 收尾 + Step 4a（任务会话壳 + 文本生成 + 心跳后台化）+ Step 4b（headless streamClaude + waiting_for_permission 可达 + WaitingForPermissionPanel） | [phase-3](../completed/refactor-phase-3-background-tasks-notifications.md) |
 | 4 | Markdown / Artifact 稳定与表现层 | Markdown 作为数据层；HTML / Artifact 作为表现层；外部资源、安全沙箱、工程输出引用 | ✅ 全部完成（2026-05-12）：trust tier + html-preview 同源路由 + CSP 4 轮 + Markdown 原地风格 + Artifact code-fence / dev-output。HTML Artifact 显式保存入口 deferred（tech-debt #18） | [phase-4](../completed/phase-4-markdown-artifact.md) |
-| 5 | Codex Runtime 接入 | Codex 像 Claude Code 一样成为同级 Runtime；Codex Account 主链路已可跑；模型兼容目标改为 CodePilot Runtime parity | 🔄 核心链路 ✅；Phase 5b 翻译层 + 注入已落地但 smoke 未完 | [phase-5 plan](./phase-5-codex-runtime.md) |
+| 5 | Codex Runtime 接入 | Codex 像 Claude Code 一样成为同级 Runtime；Codex Account 主链路已可跑；Runtime / Provider / Harness 边界已收口 | 🔄 核心链路 ✅；Phase 5e Harness 架构 ✅ 并归档；Phase 5b 翻译层 + 注入已落地但真实 credential smoke 未完 | [phase-5 plan](./phase-5-codex-runtime.md) · [phase-5e](../completed/phase-5e-runtime-harness-architecture.md) |
 | 5b | Codex provider proxy translator | 让 Codex Runtime 使用 CodePilot 已配置 provider；目标是除 Claude Code 默认/env 模式外与 CodePilot Runtime 模型能力对齐 | 🔄 翻译层 + Codex thread/start 真实 proxy 注入已落地，env provider 已从 codex_runtime 排除，unit 测试已与真实 Codex app-server 解耦；剩余必须项：三类家族（OpenAI-compat / Anthropic-compat / CodePlan）每条真实 provider credential 跑通一条 chat smoke 才能宣布 Phase 5b 闭环 | [phase-5 plan](./phase-5-codex-runtime.md) |
-| 5c | CodePilot Tool Bridge for Codex | Codex Runtime 下，CodePilot 自有 Memory / Tasks / Widget / Image / Media / Dashboard / CLI tools 也能被感知、调用并回到 UI | 📋 计划已写；待实现。当前 smoke 结论：Codex 原生 shell/file 可跑，但 `codepilot_memory_recent` / `codepilot_list_tasks` 未被调用 | [phase-5 plan](./phase-5-codex-runtime.md) |
+| 5c | CodePilot Tool Bridge for Codex | Codex Runtime 下，CodePilot 自有 Memory / Tasks / Widget / Image / Media 等能被感知、调用并回到 UI；Dashboard / CLI / assistant_buddy 在 Codex 下诚实降级 | ✅ 实现 + Harness 收口完成；Codex 不支持项在 Settings 与聊天工具结果下方用用户语言提示 | [phase-5 plan](./phase-5-codex-runtime.md) · [phase-5e](../completed/phase-5e-runtime-harness-architecture.md) |
 | 6 | 上下文可视化 | 输入框右下角是组成条而不是单一百分比 | 📋 待开始（Codex Runtime 收口后移） | — |
 | 7 | 视觉锚点与图标体系 | 点阵风格视觉记忆点 + HugeIcons 统一 | 📋 待开始（后移） | — |
 

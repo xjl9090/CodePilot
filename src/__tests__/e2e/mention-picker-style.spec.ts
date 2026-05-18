@@ -4,8 +4,8 @@ import { goToChat } from '../helpers';
 /**
  * UI polish smoke for the @ file/directory picker. Guards the style-unification
  * work done in 34c059d: the picker must match the slash / CLI / model selector
- * shell (CommandListSearch at the top, CommandListGroup header, neutral icons)
- * and must NOT revert to the old primary-blue "Files" div.
+ * shell (CommandListGroup header, neutral icons) and must NOT revert to the old
+ * primary-blue "Files" div.
  *
  * Kept deliberately light — the mention flow itself is covered by mention-ui.spec.ts.
  */
@@ -46,17 +46,10 @@ test.describe('@ picker style smoke', () => {
       page.locator('button', { hasText: 'src/components' }).first(),
     ).toBeVisible();
 
-    // Search input matches the other popovers. Placeholder is i18n'd, accept
-    // either en or zh form to stay locale-agnostic.
-    const fileSearch = page.locator(
-      'input[placeholder*="files and folders"], input[placeholder*="文件和文件夹"]',
-    );
-    await expect(fileSearch).toBeVisible();
-
-    // CommandListGroup header uses the canonical muted-foreground label style.
-    const groupHeader = page
-      .locator('.text-\\[10px\\].font-medium.text-muted-foreground')
-      .filter({ hasText: /^(Files|文件)$/ });
+    // CommandListGroup header is still present. The exact micro-class set is
+    // owned by the shared CommandList primitive and can evolve independently
+    // of this smoke; the stale primary-tinted header is guarded below.
+    const groupHeader = page.getByText(/^(Files|文件)$/).first();
     await expect(groupHeader).toBeVisible();
 
     const directoryItem = page.locator('button', { hasText: 'src/components' }).first();

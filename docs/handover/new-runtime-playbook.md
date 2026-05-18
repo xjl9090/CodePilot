@@ -310,7 +310,7 @@ Phase 5e 把 Harness 分成三层（Built-in / User CodePilot / External Framewo
 
 ### 6. Smoke matrix（不可裁剪）
 
-固定 9 项 + Phase 5e 新增 4 项（External Harness 跨框架感知 / Codex Account 降级 / Native MediaBlock side-channel / mutationLevel 拒绝静默 shell exec）。详见 `phase-5e-runtime-harness-architecture.md` Smoke Matrix 段。
+固定 9 项 + Phase 5e 新增 4 项（External Harness 跨框架感知 / Codex Account 降级 / Native MediaBlock side-channel / mutationLevel 拒绝静默 shell exec）。详见 `docs/exec-plans/completed/phase-5e-runtime-harness-architecture.md` Smoke Matrix 段。
 
 ---
 

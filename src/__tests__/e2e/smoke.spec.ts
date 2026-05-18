@@ -109,12 +109,13 @@ test.describe('Smoke @smoke', () => {
     const hasErrorOverlay = await page.locator('#__next-build-error, [data-nextjs-dialog]').count();
     expect(hasErrorOverlay).toBe(0);
 
-    // Runtime page renders three engine cards (Claude Code / CodePilot
-    // Runtime / Codex Runtime). The Codex Runtime card heading is the
-    // structural signal that the IA-correction redirect target is alive.
+    // Runtime page renders three engine cards (Claude Code / CodePilot /
+    // Codex). Phase 6 later shortened the visible labels, so the Codex
+    // card heading is the structural signal that the IA-correction
+    // redirect target is alive.
     const headings = await page.locator('h3').allTextContents();
     const headingBlob = headings.join(' ');
-    expect(headingBlob).toMatch(/Codex Runtime/);
+    expect(headingBlob).toMatch(/\bCodex\b/);
 
     const critical = filterCriticalErrors(errors);
     expect(critical).toHaveLength(0);

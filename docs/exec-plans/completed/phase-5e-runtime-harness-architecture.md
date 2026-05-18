@@ -1,8 +1,9 @@
 # Phase 5e — Runtime Harness Architecture / Agent 框架接入总线
 
 > 创建：2026-05-17
-> 状态：计划草案。Codex 主体起草；ClaudeCode 2026-05-17 第一轮补充（用户自定义 Harness 范围扩大 / Phase 6 接管关系 / 已稳路径保护 / Codex Account 永远 partial 的产品决策点 / 回归保护 smoke / 每 Phase acceptance test）。Phase 0.5 Native Runtime 基础盘审计已完成；**P0（agent-tools allowlist 止血 + assistant_buddy catalog drift）+ P1（Native MediaBlock 補齐）已落地**；剩余 P1（memory filter / recent layout + tasks session-only list/cancel parity）+ P2（dashboard prompt canonical / cli_tools 分类 / session-search & ask-user HarnessBundle 归属 / mutationLevel 抽象）。详见 Phase 0.5 优先级 + 决策日志。
-> 关系：承接 [Phase 5d Harness Capability Contract](./phase-5d-harness-capability-contract.md)，但比 Phase 5d Phase 6 更高一层。Phase 5d Phase 6 子计划（[phase-5d-phase-6-codex-account-harness.md](./phase-5d-phase-6-codex-account-harness.md)）正式归入 Phase 5e Phase 3 实施 slice，详见下文"Phase 3"段落的"承接说明"。
+> 状态：✅ 已完成并归档（2026-05-18）。Phase 0-6 均已落地：HarnessBundle 三层、Runtime/Provider/Capability matrix、Settings 能力清单、Native 基础盘 parity、mutationLevel 权限分级、工具不支持小字提示、Codex SDK coverage 调研与 New Runtime Playbook 收口全部完成。最新收口：CodePilot Native `assistant_buddy` parity 已补齐，Settings 中 ClaudeCode / CodePilot Native 均为 8/8，Codex 仍对不支持能力诚实降级。
+> 验证：`npm run test` 2870/2870 pass；`PORT=3001 PLAYWRIGHT_BASE_URL=http://localhost:3001 npm run test:smoke` 14/14 pass（2026-05-18）。CDP smoke 已验证 Settings → 执行引擎能力 Dialog、trust badges、provider note 与 trigger 不误切 Runtime。
+> 关系：承接 [Phase 5d Harness Capability Contract](../active/phase-5d-harness-capability-contract.md)，但比 Phase 5d Phase 6 更高一层。Phase 5d Phase 6 子计划（[phase-5d-phase-6-codex-account-harness.md](../active/phase-5d-phase-6-codex-account-harness.md)）正式归入 Phase 5e Phase 3 实施 slice，详见下文"Phase 3"段落的"承接说明"。
 > 用户主线诉求（2026-05-17 用户原话，置顶以防漂移）：
 >
 > 1. CodePilot 成为用户自定义 Harness 和本地 Agent 框架的**集中地**。用户能在 CodePilot 这边挂自己的 MCP / Skills，**也包括感知**用户在 ClaudeCode / Codex / 其他框架里**自己**挂的 MCP / Skills / CLI / 内置 Memory；这些外部框架的自定义内容应该**跨框架可感知**。
@@ -55,7 +56,7 @@ Harness 不是单一来源。按"谁拥有 + 注入意图"分成三层：
 |---|---|---|---|
 | Built-in Harness | CodePilot 默认 ship 的能力 | Widget / Memory / Tasks / Image / Media / Dashboard / CLI tools | `src/lib/harness/capability-contract.ts` |
 | User CodePilot Harness | 用户**在 CodePilot 这边**挂的能力 | Settings 里加的 MCP server / 自定义 Skill / 自定义 slash command / project CLAUDE.md | 部分已存在（plugins / mcp-loader），但**未在 capability-contract 中登记** |
-| External Framework Harness | 用户**在外部 Agent 框架**自己挂的能力 | 用户 `~/.claude/` 下的 ClaudeCode MCP / Skills / Memory；`~/.codex/` 下的 Codex plugins / CLI；未来 Hermes 的 user 配置 | **完全没有抽象**——Phase 5e 必须新建 |
+| External Framework Harness | 用户**在外部 Agent 框架**自己挂的能力 | 用户 `~/.claude/` 下的 ClaudeCode MCP / Skills / Memory；`~/.codex/` 下的 Codex plugins / CLI；未来 Hermes 的 user 配置 | Phase 5e 已建立 `ExternalFrameworkHarnessRef` + scanner；执行仍按 Runtime 协议能力诚实降级 |
 
 **"跨框架可感知"的硬定义**（用户原话延伸）：
 
@@ -229,14 +230,14 @@ Codex 不稳，是因为 Codex 被接成了两条路：
 
 | Phase | 内容 | 状态 | 用户可验收结果 |
 |---|---|---|---|
-| Phase 0 | 事实锁定与协作同步 | 📋 待开始 | Codex 和 ClaudeCode 对“Runtime / Provider / Harness”使用同一套定义 |
-| Phase 0.5 | Native Runtime 基础盘审计 | ✅ 审计完成 2026-05-17 | CodePilot Native 已逐 capability 标注 complete / partial / missing；实现修复进入 backlog，不再被其他 Runtime 的能力掩盖 |
-| Phase 1 | Harness Bundle 边界定义 | 📋 待开始 | 文档和类型上明确一次 turn 必经 Harness；不再出现 provider path 绕过 Harness 的模糊口径 |
-| Phase 2 | Runtime × Provider × Capability matrix | 📋 待开始 | 设置页或计划中能明确看到每条路径可用/不可用能力，以及对应 trust / approval 边界 |
-| Phase 3 | Codex Account native path 补齐或降级 | 📋 待开始 | GPT-5.5 / Codex Account 下，Widget/Dashboard 要么可用，要么明确不可用且不诱导模型瞎猜 |
-| Phase 4 | Unified Tool Invocation Surface | 📋 待开始 | CodePilot 内置工具跨 ClaudeCode / Native / Codex 的调用语义一致 |
-| Phase 5 | Permission + Artifact 收口 | 📋 待开始 | 工具结果能实时显示；写操作有统一批准/拒绝路径 |
-| Phase 6 | 新 Runtime Playbook 验收 | 📋 待开始 | Hermes 类 Agent 接入前有硬性 checklist 和 smoke matrix |
+| Phase 0 | 事实锁定与协作同步 | ✅ 已完成 | Codex 和 ClaudeCode 对“Runtime / Provider / Harness”使用同一套定义 |
+| Phase 0.5 | Native Runtime 基础盘审计 | ✅ 已完成 | CodePilot Native 已逐 capability 审计并完成 P0/P1/P2 收口；assistant_buddy parity 后为 8/8 |
+| Phase 1 | Harness Bundle 边界定义 | ✅ 已完成 | 三层 HarnessBundle + User / External scanner + 强校验落地 |
+| Phase 2 | Runtime × Provider × Capability matrix | ✅ 已完成 | Settings 能力清单从 capability contract / mutationLevel 派生，展示支持度与 trust / approval 边界 |
+| Phase 3 | Codex Account native path 补齐或降级 | ✅ 已完成 | Codex Account / Codex proxy 不可执行能力在 Settings 与聊天工具结果下方诚实提示，不诱导模型瞎猜 |
+| Phase 4 | Unified Tool Invocation Surface | ✅ 已完成 | CodePilot 内置工具通过 HarnessBundle / Runtime adapter / side-channel 统一建模；Native memory/tasks/media parity 已补齐 |
+| Phase 5 | Permission + Artifact 收口 | ✅ 已完成 | `mutationLevel` 派生权限边界；媒体结果实时显示；不支持工具以小字提示替代弹窗 |
+| Phase 6 | 新 Runtime Playbook 验收 | ✅ 已完成 | New Runtime Playbook 增加 Phase 5e checklist 和反模式；Hermes 类 Agent 接入前有硬性 checklist |
 
 ### Phase 0 — 事实锁定与协作同步
 
@@ -278,13 +279,13 @@ Codex 不稳，是因为 Codex 被接成了两条路：
 | Built-in capability | Native mount | 审计状态 | 证据 | 后续动作 |
 |---|---|---|---|---|
 | `widget` | `codepilot-widget-guidelines` group，`codepilot_load_widget_guidelines` | `complete` | Native 通过 `src/lib/builtin-tools/widget-guidelines.ts` 复用 canonical widget prompt；Widget artifact contract 已和 capability example byte-identical | 保持 smoke：Native 生成 show-widget fence 后必须能即时渲染 |
-| `memory` | `codepilot-memory` group，`codepilot_memory_recent/search/get` | `partial` | Prompt 已 re-export MCP authority，但 `src/lib/builtin-tools/memory-search.ts` 的 `codepilot_memory_search` schema 暴露 `tags` / `file_type` 却未传给 `searchWorkspace`；`memory_recent` 读取 `daily/` + `longterm/summary.md`，与 MCP 侧 `memory/daily/` + `memory.md` 习惯不一致 | 补 runtime 级测试：tags / file_type 真过滤；统一 recent 的 memory layout 或在 contract 中明确差异 |
-| `tasks_and_notify` | `codepilot-notify` group，notify / schedule / list / cancel | `partial` | `durable=false` schedule 已在 Native 实现 session-only 分支；但 list 只请求 `/api/tasks/list`，cancel 只 DELETE `/api/tasks/:id`，未像 MCP / Codex bridge 那样 merge / remove session-only tasks | 对齐 MCP：`list_tasks` 合并 `getSessionTasks()`，`cancel_task` 先查 `removeSessionTask()`，补 session-only runtime tests |
+| `memory` | `codepilot-memory` group，`codepilot_memory_recent/search/get` | ✅ `complete`（2026-05-18 Phase 5e 主体已落地） | Native `codepilot_memory_search` 已真过滤 `tags` + `file_type`；`codepilot_memory_recent` 已对齐 authoritative `memory.md` + `memory/daily/` 布局，并保留 legacy 回退。 | 维持 runtime tests：tags / file_type / recent layout 不得回退。 |
+| `tasks_and_notify` | `codepilot-notify` group，notify / schedule / list / cancel | ✅ `complete`（2026-05-18 Phase 5e 主体已落地） | Native `list_tasks` 已合并 durable + session-only tasks 并按 status 过滤；`cancel_task` 先查 session-only，再回退 durable DELETE；`schedule_task` 的 `durable=false` 保持 session-only。 | 维持 session-only runtime tests，防 camelCase/snake_case 与 durable-only 回归。 |
 | `image_generation` | `codepilot-media` group，`codepilot_generate_image` | ✅ `complete`（2026-05-17 Phase 5e P1 已落地） | `builtin-tools/media.ts` 现在调 `emitBuiltinEvent` 把 `MediaBlock[]` 推到 harness side-channel（`@/lib/harness/builtin-event-bus`）；`agent-loop.ts` 订阅后把 media 拼进 `tool_result` SSE.media 字段；`expected-differences.ts` 对应 follow_up 已关闭 | 维持：image-gen smoke 必须有 MediaBlock 端到端渲染；新 media-shaped 工具按 emit-side-channel + return-plain-text 模板 |
 | `media_import` | `codepilot-media` group，`codepilot_import_media` | ✅ `complete`（2026-05-17 Phase 5e P1 已落地） | 同上 — `importFileToLibrary` 结果构造 `MediaBlock`（用 `mediaTypeOf` 推 image/video/audio），同 side-channel 注入 | 维持：导入后 UI 实时展示媒体卡的 smoke 必须 deterministic |
-| `dashboard` | `codepilot-dashboard` group，dashboard CRUD / pin tools | `partial`（**写操作权限部分已止血**） | 工具面存在；`src/lib/builtin-tools/dashboard.ts` 仍有本地 `DASHBOARD_SYSTEM_PROMPT`，未从 MCP authority re-export（P2 待补）。**写操作权限已部分止血（2026-05-17 P0 patch）**：`agent-tools.ts` 不再前缀跳过所有 `codepilot_*`；`codepilot_dashboard_pin / update / remove` 现在走 `PERMISSION_SAFE_TOOLS.has(name)` 决策——它们**不在** allowlist，所以默认走 ask 权限流。`codepilot_dashboard_list / refresh` 是 read-only 在 allowlist。Settings capability list 仍需展示信任边界（Phase 5 正式做） | prompt canonical 化（从 dashboard-mcp.ts re-export）；Settings 卡片下方展示"dashboard pin/update/remove 需批准" |
-| `cli_tools` | `codepilot-cli-tools` group，install / update / remove / list 等 | `partial`（**安全洞已堵**） | 工具面存在；**安全洞已堵（2026-05-17 P0 patch）**：`agent-tools.ts` 不再前缀跳过；`codepilot_cli_tools_install / add / remove / update` 现在走默认 ask 权限流（shell 安装不再静默执行）；`codepilot_cli_tools_list / check_updates` 是 read-only 在 allowlist。Settings 信任边界仍需展示 | 用 `mutationLevel` 抽象正式建模（Phase 5 正式做）；Settings 卡片下方展示"cli install/update/remove 需批准" |
-| `assistant_buddy` | catalog 标 Native exposure `unsupported`（**catalog drift 已修**） | `missing`（诚实降级，无 drift） | **catalog drift 已修（2026-05-17 P0 同批）**：`assistant_buddy.exposure.native.kind` 从 `ai_sdk_tool` 改为 `unsupported`，deferredReason + notes 写明 "Native 工厂未实现 hatch_buddy；未来 ship 时再 flip 回 ai_sdk_tool"。不再有"声称暴露但实际没有"的不实口径 | 长期方向：决定 buddy 是 Harness capability 还是 assistant-workspace flow；如果决定走 Harness，再补 Native 工厂 + flip exposure |
+| `dashboard` | `codepilot-dashboard` group，dashboard CRUD / pin tools | ✅ `complete`（2026-05-18 Settings/permission 收口） | Dashboard tools 已按 exposure.kind 在 ClaudeCode + CodePilot Native 显示 executable；`mutationLevel` 派生 trust boundary，list/refresh 为 safe read，pin/update/remove 需要批准；Codex 仍 perception_only。 | 维持 Settings 能力清单与 mutationLevel 派生一致。 |
+| `cli_tools` | `codepilot-cli-tools` group，install / update / remove / list 等 | ✅ `complete`（2026-05-18 Settings/permission 收口） | 安全洞已堵：install/add/remove/update 等外部变更走 ask；list/check_updates 为 safe read；Settings 显示 trust boundary。Codex 仍 perception_only。 | 维持 mutationLevel 完整性测试；新 CLI tool 必须显式分级。 |
+| `assistant_buddy` | `codepilot-notify` group，`codepilot_hatch_buddy` | ✅ `complete`（2026-05-18 round 8 已落地） | Native `createNotificationTools()` 已挂载 `codepilot_hatch_buddy`，`capabilityIdsForGroup('codepilot-notify')` 同时返回 `tasks_and_notify` + `assistant_buddy`，`assistant_buddy.exposure.native.kind = ai_sdk_tool`；CodePilot Native Settings 能力清单为 8/8。Codex 仍 `unsupported`，所以顶层 status 继续 `deferred`。 | 维持：Native notification group 若再新增跨 capability 工具，必须同步 group → capability map + adapter pin；Codex bridge 仍诚实降级。 |
 
 Native-only 但尚未入 Built-in capability catalog 的工具组：
 
@@ -296,12 +297,12 @@ Native-only 但尚未入 Built-in capability catalog 的工具组：
 优先级：
 
 1. ✅ **P0 已落地（2026-05-17 ClaudeCode 止血 patch）**：不再把 `codepilot_*` 整体当成 safe tool。`src/lib/agent-tools.ts` 删除 `name.startsWith('codepilot_')` 一刀切，改成显式 `PERMISSION_SAFE_TOOLS` allowlist（14 条 read-only 工具 = 4 核心 Read/Glob/Grep/Skill + 10 codepilot read-only：memory_recent/search/get、load_widget_guidelines、list_tasks、dashboard_list/refresh、cli_tools_list/check_updates、session_search）。所有 mutating 工具（cli_tools_install/add/remove/update、notify、schedule_task、cancel_task、generate_image、import_media、dashboard_pin/update/remove、hatch_buddy）现在走 ask permission flow。新增 `agent-tools-permission-allowlist.test.ts`（35 pins，含后续 set-equality 加固）source-grep 禁止前缀回归 + 逐工具 rationale + 与 capability catalog 完整性 cross-check + 显式 allowlist size 对齐防静默扩张。范围严格克制：未重写 permission 架构，未引入 mutationLevel 抽象（留给 Phase 5 正式做）。
-2. ✅ **catalog drift 已落地（同批 2026-05-17）**：`assistant_buddy.exposure.native.kind` 从 `ai_sdk_tool` 改为 `unsupported`（pre-fix 声明 `createNotificationTools` 包含 `codepilot_hatch_buddy` 实为不实——`src/lib/builtin-tools/notification.ts` 只 mount notify/schedule/list/cancel）。deferredReason 写明"未来 ship Native hatch_buddy 时再 flip 回 ai_sdk_tool"。
+2. ✅ **assistant_buddy Native parity 已落地（最终收口 2026-05-18）**：先在 2026-05-17 修正 catalog drift，把不实的 Native exposure 降级为 `unsupported`；随后按用户"CodePilot Native 是基础盘"要求补齐 Native 工厂，`src/lib/builtin-tools/notification.ts` 挂载 `codepilot_hatch_buddy`，`src/lib/builtin-tools/index.ts` 的 `codepilot-notify` 同时映射 `tasks_and_notify` + `assistant_buddy`，`CAPABILITY_EXECUTABLE_RUNTIMES.assistant_buddy` 加入 `codepilot_runtime`。顶层 status 仍 `deferred`，因为 Codex bridge 尚未支持该能力；per-runtime matrix 已正确显示 ClaudeCode + CodePilot 可调用、Codex 感知降级。
 3. ✅ **P1 已落地（2026-05-17 ClaudeCode Native MediaBlock 補齐）**：`builtin-tools/media.ts` 的 `codepilot_generate_image` / `codepilot_import_media` 现在通过 harness side-channel（`@/lib/harness/builtin-event-bus`——从 `codex/proxy/builtin-event-bus.ts` promotion 到 cross-runtime harness 位置）emit `MediaBlock[]`；`agent-loop.ts` 在流开始前 subscribe，按 `toolCallId` cache，case `'tool-result'` 时 splice 到 SSE `tool_result.media` 字段。Codex bridge / Native 两条路径现在 media 协议**完全一致**；`expected-differences.ts` 唯一剩余 follow_up（image_generation MediaBlock）已清。新增 `native-media-block-side-channel.test.ts`（16 pins，含 import_media 真实 PNG fixture 成功路径端到端测试）+ 既有 codex-builtin-bridge tests（仍绿）。`npm run test` 2695/2695。
-4. P1：补 Native memory filters / recent layout 与 task session-only list/cancel parity。
-5. P2：补 dashboard prompt canonical 化（从 `builtin-tools/dashboard.ts` 的本地 `DASHBOARD_SYSTEM_PROMPT` re-export MCP authority）。
-6. P2：决定 session-search / ask-user 是否进入 HarnessBundle，而不是长期作为 Native 私有例外。
-7. P2（Phase 5 Permission + Artifact 正式做）：用显式 `mutationLevel: 'safe_read' | 'mutating_local' | 'mutating_external' | 'side_effect'` 抽象替换临时 allowlist；未声明的 tool fail-safe 走 ask；届时 `PERMISSION_SAFE_TOOLS` 转为派生值，不再人工维护。
+4. ✅ **Native memory / tasks parity 已落地（2026-05-18 Phase 5e 主体）**：memory tags/file_type/recent layout、tasks session-only list/cancel 均有 runtime tests。
+5. ✅ **mutationLevel 已落地（2026-05-18 Phase 5e 主体）**：`PERMISSION_SAFE_TOOLS` 从 `CODEPILOT_TOOL_MUTATION_LEVELS` 派生；未声明工具 fail-safe 走 ask。
+6. ✅ **Settings 能力清单已落地（2026-05-18 round 6-8）**：Dialog 承载，显示可调用数量、用户语言说明、trust boundary、Codex Account provider note 与聊天内工具不支持小字提示。
+7. **保留边界**：Codex bridge 仍不支持 dashboard / cli_tools / assistant_buddy / user MCP/Skills 的直接调用；这些在 Settings 与 tool-blocked hint 中诚实降级，不再作为 Phase 5e blocker。
 
 ClaudeCode review 补充（2026-05-17）：
 
@@ -445,7 +446,7 @@ Phase 1 引入 `HarnessBundle` 是个**新数据类型**；Phase 4 Unified Tool 
 
 #### 承接说明（ClaudeCode 2026-05-17）
 
-[phase-5d-phase-6-codex-account-harness.md](./phase-5d-phase-6-codex-account-harness.md) 的所有子 slice（6a fixture-first → 6b matrix → 6c 注入方案 → 6d dashboard bridge → 6e UI 可见性）**正式归入本 Phase 3 实施 slice**。Phase 5d Phase 6 文档保留作为子任务 backlog，但状态汇报统一在 Phase 5e 这边。决策日志双写。
+[phase-5d-phase-6-codex-account-harness.md](../active/phase-5d-phase-6-codex-account-harness.md) 的所有子 slice（6a fixture-first → 6b matrix → 6c 注入方案 → 6d dashboard bridge → 6e UI 可见性）**正式归入本 Phase 3 实施 slice**。Phase 5d Phase 6 文档保留作为子任务 backlog，但状态汇报统一在 Phase 5e 这边。决策日志双写。
 
 本计划补充更高层原则：
 
@@ -663,7 +664,7 @@ Phase 1 引入 `HarnessBundle` 是个**新数据类型**；Phase 4 Unified Tool 
   - Phase 1 入口：扫 ClaudeCode `~/.claude/*` + Codex `~/.codex/*` 用户配置，作为 External Framework Harness 进 Bundle
   - 切换顺序：Phase 1.0/1.1 先在 ClaudeCode + Native 验证 Bundle 形态，再 Codex proxy，最后 Codex Account。禁止 Codex 单点驱动 Bundle 设计
   - Phase 2 matrix：加 User CodePilot Harness + External Framework Harness 两列
-  - Phase 3 接管：[phase-5d-phase-6-codex-account-harness.md](./phase-5d-phase-6-codex-account-harness.md) 子 slice 6a-6e 正式归入 Phase 5e Phase 3
+  - Phase 3 接管：[phase-5d-phase-6-codex-account-harness.md](../active/phase-5d-phase-6-codex-account-harness.md) 子 slice 6a-6e 正式归入 Phase 5e Phase 3
   - Smoke matrix：加 "回归保护" 行（5d 130+ pin / 三 Runtime 老 flow / cross-runtime fragment byte-identity）+ "用户自定义 / 跨框架感知" 行
   - 每 Phase 加 acceptance test 锚点（防止 "能跑就算完成"）
 - 2026-05-17（用户拍板，B-Settings 变体 + Native Runtime 底线）：用户对 Phase 3 A/B/C 决策点直接定案：

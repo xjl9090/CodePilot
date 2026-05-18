@@ -222,6 +222,36 @@ test.describe('Context chips — directory chip lifecycle @smoke', () => {
     const fixtureId = 'mock-existing-session';
     let chatRequestBody: Record<string, unknown> | null = null;
 
+    // Keep this fixture independent from the user's real default runtime /
+    // provider settings. The test is about MessageInput chip state, not
+    // provider compatibility, so expose one coherent mock provider/model.
+    await page.route('**/api/providers/models**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          groups: [
+            {
+              provider_id: 'mock',
+              provider_name: 'Mock Provider',
+              provider_type: 'openai',
+              compat: 'openai_compatible',
+              models: [
+                {
+                  value: 'sonnet',
+                  label: 'Sonnet',
+                  supportedRuntimes: ['claude_code', 'codepilot_runtime', 'codex_runtime'],
+                  unsupportedReasonByRuntime: {},
+                },
+              ],
+            },
+          ],
+          default_provider_id: 'mock',
+          runtime_applied: 'codepilot_runtime',
+        }),
+      });
+    });
+
     // Mock the GET that ChatView's session loader hits.
     await page.route(`**/api/chat/sessions/${fixtureId}`, async (route) => {
       if (route.request().method() === 'GET') {
@@ -235,6 +265,7 @@ test.describe('Context chips — directory chip lifecycle @smoke', () => {
               model: 'sonnet',
               mode: 'code',
               provider_id: 'mock',
+              runtime_pin: 'codepilot_runtime',
               working_directory: '/tmp',
               permission_profile: 'default',
               context_summary: null,

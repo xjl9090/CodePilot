@@ -1,7 +1,7 @@
 # Phase 5d Phase 6 — Codex Account native path 接 Harness + Dashboard Codex bridge
 
 > 创建：2026-05-17
-> **状态变更（2026-05-17 ClaudeCode）**：本子计划的 6a-6e slice **已正式归入 [Phase 5e](./phase-5e-runtime-harness-architecture.md) Phase 3 实施 slice**。本文保留作为子任务 backlog（具体技术 slice + 风险矩阵），但状态汇报、产品决策、跨 Runtime 视角统一在 Phase 5e。新动作前先读 Phase 5e。
+> **状态变更（2026-05-18）**：本子计划的 6a-6e slice **已正式归入 [Phase 5e](../completed/phase-5e-runtime-harness-architecture.md) Phase 3 实施 slice，并随 Phase 5e 一并归档**。本文保留作为历史 backlog（具体技术 slice + 风险矩阵），但状态汇报、产品决策、跨 Runtime 视角统一看 Phase 5e 归档。
 > 父计划：[phase-5d-harness-capability-contract.md](./phase-5d-harness-capability-contract.md) `Phase 6`（保留行，但 Phase 5e 是更高层视角）
 > 触发 review：Codex review 在 Phase 3/4 review fix 之后 smoke 验证发现 P0 缺口
 > 范围：仅计划，不立刻动 Codex Account 主路径（按 [new-runtime-playbook.md](../../handover/new-runtime-playbook.md) 的 schema-first 硬流程走）

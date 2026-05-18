@@ -77,7 +77,7 @@ SDK 高层 API（按文档说明）：
 
 ### 4.2 这一轮的 Settings 标注口径（直接落到 user-facing copy）
 
-`docs/exec-plans/active/phase-5e-runtime-harness-architecture.md` round 8 已经实施的口径，与本调研结论一致——下面是与本调研对齐的部分原文：
+`docs/exec-plans/completed/phase-5e-runtime-harness-architecture.md` round 8 已经实施并归档的口径，与本调研结论一致——下面是与本调研对齐的部分原文：
 
 - **CodePilot Harness 内置能力**（widget / memory / tasks / image / media / dashboard / cli_tools / assistant_buddy）— 走的是 CodePilot 自己的 Native 工具桥 / MCP Server / 用户 provider proxy，**与 Codex 原生 plugins/skills 是两套独立系统**。
 - **Codex Account** 路径：`codex_account` 不注入 CodePilot proxy（`provider-proxy.ts:129`），所以 CodePilot 这一侧的 Harness 不会被注入；Codex 自己的 plugins / skills 由 Codex 自己管。Settings 已经通过 `CODEX_ACCOUNT_HEADER_NOTE` 双语显式说明，**不假装 CodePilot 能调用 Codex 这一侧**。
@@ -103,5 +103,5 @@ SDK 高层 API（按文档说明）：
 ## 5. 反向链接
 
 - 技术实现：`docs/handover/codex-runtime.md`（如存在）
-- 当前执行计划：`docs/exec-plans/active/phase-5e-runtime-harness-architecture.md`（Round 8 已采纳本调研的 Settings 诚实标注结论）
+- 归档执行计划：`docs/exec-plans/completed/phase-5e-runtime-harness-architecture.md`（Round 8 已采纳本调研的 Settings 诚实标注结论）
 - 相关用户层 copy：`src/lib/harness/capability-display-text.ts` `CODEX_ACCOUNT_HEADER_NOTE` + `USER_EXTENSIONS_SUMMARY.codex_runtime`

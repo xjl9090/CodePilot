@@ -81,7 +81,6 @@
 | [active/phase-5-codex-runtime.md](active/phase-5-codex-runtime.md) | **Phase 5 Codex Runtime 接入**：Runtime Contract Hardening / Codex app-server / account + model sync / Runtime adapter / 原生工具事件 / provider proxy scaffold / Codex UI 收口 / Phase 5b proxy translator | 核心链路、UI 收口 ✅；Phase 5b translator + Codex thread/start 真实 proxy 注入已落地，待真实 credential chat smoke 收口 |
 | [active/phase-5c-codex-tool-bridge.md](active/phase-5c-codex-tool-bridge.md) | **Phase 5c CodePilot Tool Bridge 执行子计划**：parse-request 分类 / proxy 头扩展 / 侧通道事件总线 / builtin-bridge 工具集 / unified-adapter 集成 / translate-stream 抑制 / runtime 订阅 / 反模式 source-grep 守卫 | 实现 + 单测 + 文档 ✅（2026-05-16，2495 tests pass），待用户跑 6 类能力族真实 smoke 收口 |
 | [active/phase-5d-harness-capability-contract.md](active/phase-5d-harness-capability-contract.md) | **Phase 5d Harness Capability Contract / 新 Runtime 接入规范**：把 Memory / Tasks / Widget / Media / Notify / Dashboard / CLI 等 CodePilot 自有能力抽成跨 Runtime contract，沉淀 Codex 接入教训，作为 Hermes 等未来 Agent 接入 playbook | Phase 0+1 ✅（2026-05-16 slice 7b 后，2544/2544 tests pass）；Phase 2 计划已撰写待 review；Phase 3-5 待开 |
-| [active/phase-5e-runtime-harness-architecture.md](active/phase-5e-runtime-harness-architecture.md) | **Phase 5e Runtime Harness Architecture / Agent 框架接入总线**：明确 Runtime / Provider / Harness 三层边界，解释 Codex 接入拖长的根因，定义未来 Hermes 等 Agent 框架接入时必须遵守的 Harness Bundle / capability matrix / smoke matrix | 📋 新计划草案；Phase 0.5 Native Runtime 基础盘审计已完成，后续修复按 capability backlog 推进 |
 | [active/phase-5d-phase-2-context-compiler.md](active/phase-5d-phase-2-context-compiler.md) | **Phase 5d Phase 2 Context Compiler 子计划**：把 ClaudeCode / Native / Codex 三处分散的上下文注入合并成纯函数 `compileContext(input): CompiledContext`，Runtime 只 adapt 不 redefine | 📋 计划已提交，等 Codex review 通过后开始 slice 2a |
 | [active/issue-tracker.md](active/issue-tracker.md) | **统一问题跟踪**：所有 Bug / Feature Request / Sentry 监控的活动看板 | 持续维护 |
 
@@ -119,6 +118,7 @@
 
 | 文件 | 主题 | 完成日期 |
 |------|------|----------|
+| [completed/phase-5e-runtime-harness-architecture.md](completed/phase-5e-runtime-harness-architecture.md) | Phase 5e Runtime Harness Architecture：Runtime / Provider / Harness 三层边界、三层 HarnessBundle、User/External scanner、Settings 能力清单、mutationLevel 权限分级、Native 基础盘补齐、Codex 不支持能力诚实降级、New Runtime Playbook 收口 | 2026-05-18 |
 | [completed/phase-4-markdown-artifact.md](completed/phase-4-markdown-artifact.md) | refactor-closeout Phase 4 归档：Markdown 数据层（trust tier / quiet refresh / 编辑冲突）+ HTML 表现层（同源路由 / CSP 4 轮）+ Markdown 原地风格 + Artifact code-fence / dev-output 引用 | 2026-05-12 |
 | [completed/refactor-phase-3-background-tasks-notifications.md](completed/refactor-phase-3-background-tasks-notifications.md) | refactor-closeout Phase 3 归档（菜单栏常驻 + 全局定时任务 + 本机通知 + Bridge 解耦 + 后台 Agent 任务 + 心跳后台化 + dev-server 内存收口） | 2026-05-10 |
 | [completed/refactor-phase-2-runtime-session.md](completed/refactor-phase-2-runtime-session.md) | refactor-closeout Phase 2 归档（Runtime 与会话执行：session.runtime_pin + composer 切换面板 + 409 banner + transcript marker） | 2026-05-07 |
