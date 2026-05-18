@@ -1278,6 +1278,149 @@ const { createProvider, deleteProvider } = require('../../lib/db');
 // `dbHiddenIds` and fills `roleModels.default` from the picked fallback
 // upstream so `ANTHROPIC_MODEL` stays meaningful.
 
+describe('OpenRouter Anthropic-skin — alias-row canonicalization (round 9)', () => {
+  it('legacy DB row haiku→haiku is canonicalized to anthropic/claude-haiku-4.5 via the preset', () => {
+    // Phase 5b round-9 (2026-05-18) — round 8 added upstream slugs
+    // to the OpenRouter preset, but existing provider records had
+    // `provider_models` rows with `upstream_model_id='haiku'` (alias
+    // self-reference) from when the preset was alias-only. The
+    // DB-wins merge in resolveProvider shadowed the new preset, so
+    // smoke was still sending bare `haiku` upstream. This test
+    // exercises the normalize step: legacy alias-self DB row +
+    // OpenRouter Anthropic-skin base URL → resolved upstream is the
+    // preset slug.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createProvider, deleteProvider, upsertProviderModel } = require('../../lib/db');
+    const provider = createProvider({
+      name: '__test_openrouter_round9__',
+      provider_type: 'openrouter',
+      base_url: 'https://openrouter.ai/api', // Anthropic skin — NOT /api/v1
+      api_key: 'or-test-key',
+    });
+    try {
+      // Materialize the legacy-shape DB row that round 9 must heal.
+      upsertProviderModel({
+        provider_id: provider.id,
+        model_id: 'haiku',
+        upstream_model_id: 'haiku', // <-- legacy alias self-reference
+        display_name: 'Haiku 4.5',
+        enabled: 1,
+        source: 'manual',
+        user_edited: 0,
+        sort_order: 0,
+      });
+
+      const resolved = resolveProvider({
+        providerId: provider.id,
+        model: 'haiku',
+      });
+
+      const haikuEntry = resolved.availableModels.find(m => m.modelId === 'haiku');
+      assert.ok(haikuEntry, 'haiku must remain in availableModels after normalize');
+      assert.equal(
+        haikuEntry!.upstreamModelId,
+        'anthropic/claude-haiku-4.5',
+        'legacy alias self-reference must be canonicalized to the preset slug',
+      );
+
+      const config = toAiSdkConfig(resolved, 'haiku');
+      assert.equal(
+        config.modelId,
+        'anthropic/claude-haiku-4.5',
+        'toAiSdkConfig must produce the canonicalized upstream so the proxy sends OpenRouter a valid model id',
+      );
+      assert.equal(
+        config.sdkType,
+        'claude-code-compat',
+        '/api Anthropic skin still routes through claude-code-compat (round 7)',
+      );
+    } finally {
+      deleteProvider(provider.id);
+    }
+  });
+
+  it('user-configured full upstream slug is preserved (no override)', () => {
+    // Belt: if a user manually set `anthropic/claude-haiku-4.6` (a
+    // different version than our preset 4.5), the normalize MUST
+    // NOT clobber it. Customization wins. The gate is strict:
+    // override only when upstream is undefined OR === alias.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createProvider, deleteProvider, upsertProviderModel } = require('../../lib/db');
+    const provider = createProvider({
+      name: '__test_openrouter_round9_preserve__',
+      provider_type: 'openrouter',
+      base_url: 'https://openrouter.ai/api',
+      api_key: 'or-test-key',
+    });
+    try {
+      upsertProviderModel({
+        provider_id: provider.id,
+        model_id: 'haiku',
+        upstream_model_id: 'anthropic/claude-haiku-4.6', // user-set, different version
+        display_name: 'Haiku 4.6 (user-pinned)',
+        enabled: 1,
+        source: 'manual',
+        user_edited: 1,
+        sort_order: 0,
+      });
+
+      const resolved = resolveProvider({
+        providerId: provider.id,
+        model: 'haiku',
+      });
+      const haikuEntry = resolved.availableModels.find(m => m.modelId === 'haiku');
+      assert.equal(
+        haikuEntry!.upstreamModelId,
+        'anthropic/claude-haiku-4.6',
+        'user-configured upstream must NOT be overwritten by the preset',
+      );
+    } finally {
+      deleteProvider(provider.id);
+    }
+  });
+
+  it('OpenAI skin (/api/v1) provider is NOT touched by the OpenRouter normalize', () => {
+    // The normalize is gated by isOpenRouterAnthropicSkinUrl which
+    // returns false for /api/v1. So an OpenAI-skin OpenRouter
+    // provider's DB rows pass through unchanged. (Bare aliases on
+    // OpenAI skin are still wrong upstream but that's a different
+    // surface — not in scope here.)
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createProvider, deleteProvider, upsertProviderModel } = require('../../lib/db');
+    const provider = createProvider({
+      name: '__test_openrouter_round9_openai_skin__',
+      provider_type: 'openrouter',
+      base_url: 'https://openrouter.ai/api/v1', // OpenAI skin
+      api_key: 'or-test-key',
+    });
+    try {
+      upsertProviderModel({
+        provider_id: provider.id,
+        model_id: 'haiku',
+        upstream_model_id: 'haiku', // legacy alias self-reference
+        display_name: 'Haiku',
+        enabled: 1,
+        source: 'manual',
+        user_edited: 0,
+        sort_order: 0,
+      });
+
+      const resolved = resolveProvider({
+        providerId: provider.id,
+        model: 'haiku',
+      });
+      const haikuEntry = resolved.availableModels.find(m => m.modelId === 'haiku');
+      assert.equal(
+        haikuEntry!.upstreamModelId,
+        'haiku',
+        'OpenAI skin /api/v1 must NOT be touched by the OpenRouter Anthropic-skin normalize',
+      );
+    } finally {
+      deleteProvider(provider.id);
+    }
+  });
+});
+
 describe('Hidden role models do not leak into Claude Code env', () => {
   it('hidden role default is stripped + ANTHROPIC_MODEL takes picked fallback', () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports

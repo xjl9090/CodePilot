@@ -134,6 +134,45 @@ export interface ResolveOptions {
  *
  * Special value 'env' = use environment variables (skip DB lookup).
  */
+/**
+ * Phase 5b round-9 (2026-05-18) — alias-row canonicalization for
+ * OpenRouter Anthropic-skin providers.
+ *
+ * Pre-round-8 the preset's `defaultModels` was alias-only
+ * (`ANTHROPIC_DEFAULT_MODELS` — no `upstreamModelId`). Provider
+ * records created in that window have `provider_models` rows whose
+ * `upstream_model_id` is either NULL or equal to the alias itself
+ * (`'haiku' → 'haiku'`). Round 8 added the upstream slugs to the
+ * preset (`OPENROUTER_ANTHROPIC_MODELS`), but `resolveProvider`'s
+ * DB-wins merge shadowed them — so the resolver kept handing the
+ * bare alias to upstream, which OpenRouter rejects with "is not a
+ * valid model ID".
+ *
+ * Fix: after the DB merge, take any alias entry whose upstream is
+ * missing or self-referential and fill it from the preset slug.
+ * Don't override a user-configured full slug (`anthropic/...`) —
+ * customization wins. Exported so `/api/providers/models` route
+ * can apply the same shape so chat send + picker + resolver agree.
+ */
+export function normalizeOpenRouterAnthropicAlias(
+  model: CatalogModel,
+  presetModels: readonly CatalogModel[],
+): CatalogModel {
+  if (model.modelId !== 'sonnet' && model.modelId !== 'opus' && model.modelId !== 'haiku') {
+    return model;
+  }
+  const preset = presetModels.find(m => m.modelId === model.modelId);
+  const presetUpstream = preset?.upstreamModelId;
+  if (!presetUpstream) return model;
+  // Override only when the DB row carries no upstream (NULL) or
+  // points at the alias itself (legacy shape). A user who set
+  // `anthropic/claude-haiku-4.6` manually should keep that.
+  if (!model.upstreamModelId || model.upstreamModelId === model.modelId) {
+    return { ...model, upstreamModelId: presetUpstream };
+  }
+  return model;
+}
+
 export function resolveProvider(opts: ResolveOptions = {}): ResolvedProvider {
   const effectiveProviderId = opts.providerId || opts.sessionProviderId || '';
 
@@ -876,7 +915,18 @@ function buildResolution(
   // otherwise the runtime sees models the user explicitly hid in Settings >
   // Models. We fetch all rows and partition into enabled-set + hidden-set.
   // `dbHiddenIds` is also used downstream to guard the role-default fallback.
-  let availableModels = getDefaultModelsForProvider(protocol, provider.base_url, provider.provider_type);
+  //
+  // Round 9 (2026-05-18): capture the preset catalog BEFORE the DB merge so
+  // we can canonicalize alias rows that pre-date the round-8 catalog
+  // update. Detail: round 8 added OpenRouter upstream slugs to the preset
+  // (anthropic/claude-haiku-4.5 etc.), but a provider record created
+  // BEFORE that change had `provider_models` rows with
+  // upstream_model_id='haiku' (or NULL). The DB-wins merge below then
+  // shadowed the preset slug. The normalize step below fills the missing
+  // upstream from the preset for OpenRouter Anthropic-skin only — never
+  // overrides a user-configured full slug.
+  const presetModels = getDefaultModelsForProvider(protocol, provider.base_url, provider.provider_type);
+  let availableModels: CatalogModel[] = [...presetModels];
   let dbHiddenIds = new Set<string>();
   try {
     const dbAll = getAllModelsForProvider(provider.id);
@@ -896,6 +946,30 @@ function buildResolution(
       ];
     }
   } catch { /* provider_models table may not exist in old DBs */ }
+
+  // Round 9 (2026-05-18): historical-data canonicalization for OpenRouter
+  // Anthropic-skin. Apply preset upstream slugs to any alias rows whose
+  // upstream is missing or equals the alias itself (legacy DB shape).
+  // Gates strictly:
+  //   - inferred `protocol === 'openrouter'` (the LOCAL var computed at
+  //     line 894 above, NOT `provider.protocol` — that DB column may be
+  //     NULL on legacy rows and is normalized via inferProtocolFromProvider)
+  //   - base_url passes `isOpenRouterAnthropicSkinUrl` (i.e. ends with `/api`,
+  //     not `/api/v1` — runtime-compat.ts:49 owns the predicate)
+  //   - modelId is one of the three aliases
+  //   - upstreamModelId is undefined OR === modelId (alias self-reference)
+  // User-configured full slugs (anything else, e.g. `anthropic/claude-haiku-4.6`)
+  // are preserved. Same normalize is applied by `/api/providers/models` so
+  // chat send + picker + resolver all see the same shape.
+  if (
+    protocol === 'openrouter' &&
+    provider.base_url &&
+    isOpenRouterAnthropicSkinUrl(provider.base_url)
+  ) {
+    availableModels = availableModels.map(m =>
+      normalizeOpenRouterAnthropicAlias(m, presetModels),
+    );
+  }
 
   // Read per-provider options
   const providerOpts = getProviderOptions(provider.id);

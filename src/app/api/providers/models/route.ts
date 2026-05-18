@@ -5,7 +5,11 @@ import { getDefaultModelsForProvider, getEffectiveProviderProtocol, findPresetFo
 import type { Protocol } from '@/lib/provider-catalog';
 import type { ErrorResponse, ProviderModelGroup } from '@/types';
 import { getOAuthStatus } from '@/lib/openai-oauth-manager';
-import { getProviderCompat, getModelCompat } from '@/lib/runtime-compat';
+import {
+  getProviderCompat,
+  getModelCompat,
+  isOpenRouterAnthropicSkinUrl,
+} from '@/lib/runtime-compat';
 import { isChatRuntimeParam, resolveChatRuntimeParam, type ChatRuntime } from '@/lib/chat-runtime';
 
 // OpenAI models available through ChatGPT Plus/Pro OAuth (Codex API)
@@ -230,6 +234,36 @@ export async function GET(request: NextRequest) {
         rawModels = [...dbModels, ...catalogRaw.filter(m => !dbIds.has(m.value))];
       } else {
         rawModels = [...catalogRaw];
+      }
+
+      // Round 9 (2026-05-18) — OpenRouter Anthropic-skin alias-row
+      // canonicalization. Mirrors `normalizeOpenRouterAnthropicAlias`
+      // in provider-resolver.ts so the picker / Models page / chat
+      // send all read the same upstream slug. Pre-fix this surface
+      // also handed back `haiku → haiku` for legacy DB rows that
+      // pre-date the round-8 preset upstreams.
+      // Use the locally-inferred `protocol` (line 169) — `provider.protocol`
+      // is the raw DB column which may be NULL for legacy rows; the resolver
+      // applies the same normalize against the inferred protocol.
+      if (
+        protocol === 'openrouter' &&
+        provider.base_url &&
+        isOpenRouterAnthropicSkinUrl(provider.base_url)
+      ) {
+        const presetByAlias = new Map(catalogModels.map(m => [m.modelId, m]));
+        rawModels = rawModels.map(m => {
+          if (m.value !== 'sonnet' && m.value !== 'opus' && m.value !== 'haiku') {
+            return m;
+          }
+          const presetUpstream = presetByAlias.get(m.value)?.upstreamModelId;
+          if (!presetUpstream) return m;
+          // Same override gate as the resolver: only fill missing or
+          // self-referential upstreams; preserve full slugs.
+          if (!m.upstreamModelId || m.upstreamModelId === m.value) {
+            return { ...m, upstreamModelId: presetUpstream };
+          }
+          return m;
+        });
       }
 
       // Inject models from role_models_json into the list if not already
