@@ -78,7 +78,7 @@ export function NavRail({ onToggleChatList, hasUpdate, readyToInstall, skipPermi
                       }
                     }}
                   >
-                    <CodePilotIcon name={item.icon} size="md" strokeWidth={isActive ? 2 : undefined} aria-hidden />
+                    <CodePilotIcon name={item.icon} size="md" strokeWidth={isActive ? 2 : undefined} className="text-inherit" aria-hidden />
                     <span className="sr-only">{t(navLabelKeys[item.label] ?? item.label as TranslationKey)}</span>
                   </Button>
                 ) : (
@@ -93,7 +93,7 @@ export function NavRail({ onToggleChatList, hasUpdate, readyToInstall, skipPermi
                       )}
                     >
                       <Link href={item.href}>
-                        <CodePilotIcon name={item.icon} size="md" strokeWidth={isActive ? 2 : undefined} aria-hidden />
+                        <CodePilotIcon name={item.icon} size="md" strokeWidth={isActive ? 2 : undefined} className="text-inherit" aria-hidden />
                         <span className="sr-only">{t(navLabelKeys[item.label] ?? item.label as TranslationKey)}</span>
                       </Link>
                     </Button>
@@ -134,7 +134,7 @@ export function NavRail({ onToggleChatList, hasUpdate, readyToInstall, skipPermi
                 )}
               >
                 <Link href="/settings">
-                  <CodePilotIcon name="settings" size="md" strokeWidth={isSettingsActive ? 2 : undefined} aria-hidden />
+                  <CodePilotIcon name="settings" size="md" strokeWidth={isSettingsActive ? 2 : undefined} className="text-inherit" aria-hidden />
                   <span className="sr-only">{t('nav.settings')}</span>
                 </Link>
               </Button>

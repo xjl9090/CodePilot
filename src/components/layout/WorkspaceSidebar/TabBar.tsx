@@ -48,20 +48,28 @@ function tabIcon(tab: Tab): React.ReactNode {
   // Phase 4 UX v5 — icons scaled from 14 → 16 to match the size-4
   // (16px) icons inside SelectTrigger / TabsTrigger in the file-info
   // row. Tab strip + file-info row now read at the same density.
+  //
+  // Phase 7 color rule (2026-05-21): tab leading icons use
+  // `text-inherit` so they follow the tab pill's text color —
+  // inactive tab pill is `text-muted-foreground` (light), active is
+  // `text-foreground` (dark). Without `text-inherit` the CodePilotIcon
+  // default (`text-muted-foreground`) would lock every leading icon to
+  // light even when its tab is active, breaking the "selected → dark"
+  // half of the color rule.
   if (tab.kind === 'fixed') {
     return tab.id === 'git'
-      ? <CodePilotIcon name="git" size="md" aria-hidden />
-      : <CodePilotIcon name="chart" size="md" aria-hidden />;
+      ? <CodePilotIcon name="git" size="md" className="text-inherit" aria-hidden />
+      : <CodePilotIcon name="chart" size="md" className="text-inherit" aria-hidden />;
   }
-  if (tab.kind === 'files-pinned') return <CodePilotIcon name="pin" size="md" aria-hidden />;
+  if (tab.kind === 'files-pinned') return <CodePilotIcon name="pin" size="md" className="text-inherit" aria-hidden />;
   if (tab.kind === 'markdown' || tab.kind === 'file') {
     const ext = (tab.kind === 'markdown' ? '.md' : tab.filePath.split('.').pop() || '').toLowerCase();
-    if (ext.endsWith('.md') || tab.kind === 'markdown') return <CodePilotIcon name="file" size="md" aria-hidden />;
-    if (['.ts', '.tsx', '.js', '.jsx', '.py'].includes(`.${ext}`)) return <CodePilotIcon name="code" size="md" aria-hidden />;
-    return <CodePilotIcon name="file_code" size="md" aria-hidden />;
+    if (ext.endsWith('.md') || tab.kind === 'markdown') return <CodePilotIcon name="file" size="md" className="text-inherit" aria-hidden />;
+    if (['.ts', '.tsx', '.js', '.jsx', '.py'].includes(`.${ext}`)) return <CodePilotIcon name="code" size="md" className="text-inherit" aria-hidden />;
+    return <CodePilotIcon name="file_code" size="md" className="text-inherit" aria-hidden />;
   }
   // artifact
-  return <CodePilotIcon name="folder_open" size="md" aria-hidden />;
+  return <CodePilotIcon name="folder_open" size="md" className="text-inherit" aria-hidden />;
 }
 
 export function TabBar({ className }: TabBarProps) {
@@ -271,7 +279,7 @@ function TabItem({
             data-codepilot-tab-leading
             aria-label={closeAriaLabel}
             role="button"
-            className="relative flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground group-hover:text-foreground"
+            className="relative flex h-4 w-4 shrink-0 items-center justify-center text-inherit"
           >
             <span className="absolute inset-0 flex items-center justify-center transition-opacity group-hover:opacity-0">
               {tabIcon(tab)}
@@ -281,7 +289,7 @@ function TabItem({
             </span>
           </span>
         ) : (
-          <span className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
+          <span className="flex h-4 w-4 shrink-0 items-center justify-center text-inherit">
             {tabIcon(tab)}
           </span>
         )}

@@ -472,7 +472,7 @@ export function ChatListPanel({ open, width, hasUpdate, readyToInstall }: ChatLi
             disabled={creatingChat}
             onClick={handleNewChat}
           >
-            <CodePilotIcon name="chat" size="md" aria-hidden />
+            <CodePilotIcon name="chat" size="md" className="text-inherit" aria-hidden />
             {t('chatList.newConversation')}
           </Button>
 
@@ -483,7 +483,7 @@ export function ChatListPanel({ open, width, hasUpdate, readyToInstall }: ChatLi
             className="group w-full justify-start gap-2 h-9 px-3 rounded-xl text-[13px] font-normal text-sidebar-foreground"
             onClick={() => window.dispatchEvent(new CustomEvent('open-global-search'))}
           >
-            <CodePilotIcon name="search" size="md" aria-hidden />
+            <CodePilotIcon name="search" size="md" className="text-inherit" aria-hidden />
             <span>{t('chatList.searchSessions')}</span>
             <kbd className="ml-auto hidden group-hover:inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground/80">
               ⌘K
@@ -504,7 +504,7 @@ export function ChatListPanel({ open, width, hasUpdate, readyToInstall }: ChatLi
                       : "text-sidebar-foreground font-normal"
                   }`}
                 >
-                  <CodePilotIcon name={item.icon} size="md" strokeWidth={isActive ? 2 : undefined} aria-hidden />
+                  <CodePilotIcon name={item.icon} size="md" strokeWidth={isActive ? 2 : undefined} className="text-inherit" aria-hidden />
                   {item.label}
                 </Button>
               </Link>
@@ -830,7 +830,7 @@ export function ChatListPanel({ open, width, hasUpdate, readyToInstall }: ChatLi
                 : "text-sidebar-foreground font-normal"
             }`}
           >
-            <CodePilotIcon name="settings" size="md" strokeWidth={pathname.startsWith("/settings") ? 2 : undefined} aria-hidden />
+            <CodePilotIcon name="settings" size="md" strokeWidth={pathname.startsWith("/settings") ? 2 : undefined} className="text-inherit" aria-hidden />
             {t('nav.settings' as TranslationKey)}
             {(hasUpdate || readyToInstall) && (
               <span className={`ml-auto h-2 w-2 rounded-full ${readyToInstall ? "bg-primary" : "bg-primary animate-pulse"}`} />

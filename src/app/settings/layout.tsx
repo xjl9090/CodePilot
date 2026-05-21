@@ -67,7 +67,7 @@ export default function SettingsRouteLayout({
                   : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
               )}
             >
-              <CodePilotIcon name={item.icon} size="md" className="shrink-0" aria-hidden />
+              <CodePilotIcon name={item.icon} size="md" className="shrink-0 text-inherit" aria-hidden />
               {t(item.i18nKey)}
             </Link>
           );

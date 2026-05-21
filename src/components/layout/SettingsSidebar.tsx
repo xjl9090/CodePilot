@@ -98,6 +98,7 @@ export function SettingsSidebar({ open, width }: SettingsSidebarProps) {
                 name={item.icon}
                 size="md"
                 strokeWidth={isActive ? 2 : undefined}
+                className="text-inherit"
                 aria-hidden
               />
               {t(item.i18nKey)}

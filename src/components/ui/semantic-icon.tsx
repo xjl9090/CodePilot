@@ -394,18 +394,34 @@ export function CodePilotIcon({
 }: CodePilotIconProps) {
   const iconDef = SEMANTIC_MAP[name];
   const pixelSize = resolveSize(size);
-  // No default color class — HugeIcons' SVG paths use stroke=
-  // "currentColor" so the icon inherits its parent text color
-  // naturally. Consumers that want muted icons pass
-  // `className="text-muted-foreground"` explicitly; consumers in
-  // text-colored contexts (sidebar links, active states) get correct
-  // colors without us having to override the muted default.
+  // Default = `text-muted-foreground` (light/secondary tone). Phase 7
+  // (2026-05-21) color semantic:
+  //   - Most icons are "secondary affordance" — they sit next to text
+  //     labels and shouldn't compete with the label for attention.
+  //     Default light gives the label primacy.
+  //   - Anchor icons (left rail / sidebar quick actions / Settings
+  //     left nav) live without an adjacent label OR represent the
+  //     primary nav target. Pass `className="text-inherit"` to make
+  //     them follow the parent text color (which is dark by design
+  //     in those surfaces).
+  //   - Active / selected / hover states are handled by the parent
+  //     button / link adjusting its `text-*` class on the right
+  //     state; child icons follow via currentColor inheritance when
+  //     they opt into `text-inherit`.
+  //   - Brand mark (MonolithIcon) is a separate component that
+  //     defaults to `text-foreground` because it represents app
+  //     identity, not "an icon next to a label".
+  //
+  // tailwind-merge in `cn` ensures the consumer's className (e.g.
+  // 'text-inherit' or 'text-status-success-foreground') replaces the
+  // default 'text-muted-foreground' — both are in the text-color
+  // group so the later wins.
   return (
     <HugeiconsIcon
       icon={iconDef}
       size={pixelSize}
       strokeWidth={strokeWidth}
-      className={cn(className)}
+      className={cn('text-muted-foreground', className)}
       aria-label={ariaLabel}
       aria-hidden={ariaHidden}
       role={ariaLabel ? 'img' : undefined}
