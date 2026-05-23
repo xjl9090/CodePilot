@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { SpinnerGap, CheckCircle, Warning } from "@/components/ui/icon";
+import { CodePilotIcon } from "@/components/ui/semantic-icon";
+import { SaveButton } from "@/components/ui/save-button";
 import { useTranslation } from "@/hooks/useTranslation";
 import { SettingsCard } from "@/components/patterns/SettingsCard";
 import { FieldRow } from "@/components/patterns/FieldRow";
@@ -40,36 +42,6 @@ const DEFAULT_SETTINGS: FeishuBridgeSettings = {
   bridge_feishu_group_allow_from: "",
   bridge_feishu_require_mention: "false",
 };
-
-/** SaveButton: shows Save / Saving / Saved based on dirty + saving state. */
-function SaveButton({
-  dirty,
-  saving,
-  onClick,
-  label,
-  savedLabel,
-}: {
-  dirty: boolean;
-  saving: boolean;
-  onClick: () => void;
-  label: string;
-  savedLabel: string;
-}) {
-  return (
-    <Button size="sm" onClick={onClick} disabled={saving || !dirty}>
-      {saving ? (
-        <>
-          <SpinnerGap size={14} className="animate-spin mr-1.5" />
-          {label}
-        </>
-      ) : dirty ? (
-        label
-      ) : (
-        savedLabel
-      )}
-    </Button>
-  );
-}
 
 export function FeishuBridgeSection() {
   // ── Credentials state ──
@@ -324,7 +296,13 @@ export function FeishuBridgeSection() {
         bridge_feishu_app_id: appId,
         bridge_feishu_domain: domain,
       };
-      if (appSecret && !appSecret.startsWith("***")) {
+      // Three-way secret handling: mask kept = omit / empty = explicit
+      // clear / real value = send. Empty case lets the user remove a
+      // saved secret via the UI, which the old `if (secret && ...)`
+      // gate silently dropped.
+      if (appSecret === "") {
+        updates.bridge_feishu_app_secret = "";
+      } else if (!appSecret.startsWith("***")) {
         updates.bridge_feishu_app_secret = appSecret;
       }
       if (await saveToApi(updates)) {
@@ -451,6 +429,7 @@ export function FeishuBridgeSection() {
             <div className="flex items-center gap-3">
               {!registering ? (
                 <Button size="sm" onClick={handleQuickCreate}>
+                  <CodePilotIcon name="plus" size="sm" aria-hidden />
                   {t("feishu.quickCreateBtn")}
                 </Button>
               ) : (
@@ -533,8 +512,6 @@ export function FeishuBridgeSection() {
                 dirty={credentialsDirty}
                 saving={credentialsSaving}
                 onClick={handleSaveCredentials}
-                label={t("common.save")}
-                savedLabel={t("feishu.saved")}
               />
               <Button
                 size="sm"
@@ -673,8 +650,6 @@ export function FeishuBridgeSection() {
           dirty={behaviorDirty}
           saving={behaviorSaving}
           onClick={handleSaveBehavior}
-          label={t("common.save")}
-          savedLabel={t("feishu.saved")}
         />
       </SettingsCard>
 

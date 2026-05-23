@@ -1,6 +1,13 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { SpinnerGap, CheckCircle } from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -47,7 +54,7 @@ export function OnboardingCard({ onboardingComplete, creatingSession, onStartOnb
     <div className="rounded-lg bg-card border border-border/50 p-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-medium">{t('assistant.onboardingTitle')}</h2>
+          <h2 className="text-base font-medium">{t('assistant.onboardingTitle')}</h2>
           <p className="text-xs text-muted-foreground mt-1">{t('assistant.onboardingDesc')}</p>
           <p className="text-xs mt-1">
             <span className="text-status-warning-foreground">{t('assistant.onboardingNotStarted')}</span>
@@ -106,7 +113,7 @@ export function CheckInCard({
   return (
     <div className="rounded-lg bg-card border border-border/50 p-5 space-y-2.5">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-medium">{t('assistant.heartbeatTitle')}</h2>
+        <h2 className="text-base font-medium">{t('assistant.heartbeatTitle')}</h2>
         <Switch checked={autoTriggerEnabled} onCheckedChange={onAutoTriggerChange} />
       </div>
       <p className="text-xs text-muted-foreground leading-relaxed">
@@ -126,23 +133,23 @@ export function CheckInCard({
       </p>
       {autoTriggerEnabled && typeof intervalHours === 'number' && onIntervalChange && (
         <div className="flex items-center justify-between gap-3 pt-1">
-          <label
-            htmlFor="heartbeat-interval-select"
-            className="text-xs text-muted-foreground"
-          >
+          <span className="text-xs text-muted-foreground">
             {t('assistant.heartbeatInterval' as TranslationKey)}
-          </label>
-          <select
-            id="heartbeat-interval-select"
-            className="rounded-md border border-border/60 bg-background text-xs px-2 py-1"
+          </span>
+          <Select
             value={String(intervalHours)}
-            onChange={(e) => onIntervalChange(parseInt(e.target.value, 10) || 24)}
+            onValueChange={(v) => onIntervalChange(parseInt(v, 10) || 24)}
           >
-            <option value="1">{t('assistant.heartbeatInterval1h' as TranslationKey)}</option>
-            <option value="6">{t('assistant.heartbeatInterval6h' as TranslationKey)}</option>
-            <option value="12">{t('assistant.heartbeatInterval12h' as TranslationKey)}</option>
-            <option value="24">{t('assistant.heartbeatInterval24h' as TranslationKey)}</option>
-          </select>
+            <SelectTrigger className="w-auto text-xs h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">{t('assistant.heartbeatInterval1h' as TranslationKey)}</SelectItem>
+              <SelectItem value="6">{t('assistant.heartbeatInterval6h' as TranslationKey)}</SelectItem>
+              <SelectItem value="12">{t('assistant.heartbeatInterval12h' as TranslationKey)}</SelectItem>
+              <SelectItem value="24">{t('assistant.heartbeatInterval24h' as TranslationKey)}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       )}
       <p className="text-[11px] text-muted-foreground">

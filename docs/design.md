@@ -69,6 +69,55 @@ spacing:
 
 Concrete patterns extracted from `Settings > Providers` and `Settings > Models`. Anything in here is implemented and shipping; treat it as the canonical surface for new Settings work.
 
+## Token 分类（产品 token vs 平台 token）
+
+CodePilot 的 CSS token 分两层。本节是项目级原则，虽然 design.md 主要服务 Settings，但 token 分类规则对所有 UI 改动都适用。任何引入新 token 或改 token 用法的 PR 在 review 时必须能回答"这是产品 token 还是平台 token"。
+
+### 产品 token —— 跨平台一致
+
+声明位置：`src/app/globals.css` `:root` / `.dark`，以及 `themes/*.json`。
+
+涵盖：
+- 色板：`--background` / `--foreground` / `--card` / `--popover` / `--sidebar` / `--muted` / `--accent` / `--border` / `--primary` 等
+- 圆角：`--radius`（产品组件圆角，目前 `1rem`）— 注意 design.md 顶部 frontmatter 仍以 8px 作为 outer card 的画板规范；个别 card 仍按本规范的 `rounded-lg` 处理
+- 状态色：`--status-success-*` / `--status-warning-*` / `--status-error-*` / `--status-info-*`
+- 字体：`--font-geist-sans` / `--font-geist-mono`
+- Terminal / 代码块、Composer shadow、Context dot 等业务专用 token
+
+**用在**：组件内层（按钮、表单字段、表格、内容卡片、对话框 body、消息气泡）。
+
+### 平台 token —— 仅在 macOS profile 当前注入
+
+声明位置：`src/app/globals.css` 的 `:root` / `html[data-platform="darwin"][data-platform-style="auto"]`。
+
+前缀：`--platform-*`。当前可用 token：
+- `--platform-font-ui` —— chrome UI 字体（默认 Geist；macOS 切到 SF/system-ui 栈）
+- `--platform-radius-window` / `--platform-radius-control` —— 窗口和控件圆角
+- `--platform-hover-alpha` —— 壳层 hover 强度（默认 1，macOS 软化到 0.7）
+- `--platform-surface-sidebar` / `--platform-surface-bar` / `--platform-surface-popover` / `--platform-surface-hud` / `--platform-surface-tooltip` —— 壳层与浮层表面
+- `--platform-border-subtle` —— chrome 边缘细线
+
+**用在**：窗口 chrome / 顶栏 / 侧栏 / Composer 外壳 / Popover / Menu / HUD / Tooltip 这类"壳层 + 浮层"。
+
+### 决策规则
+
+| 你要改的元素 | 用哪一层 |
+|--------------|----------|
+| 按钮、输入框、表单字段、表格、内容卡片、对话框 body | 产品 token |
+| 顶栏、侧栏、Composer 外壳、Popover/Menu/HUD/Tooltip 的表面材质 | 平台 token |
+| 圆角：组件圆角 | `--radius`（产品） |
+| 圆角：窗口/侧栏外框 | `--platform-radius-window`（平台） |
+| 字体：正文 / 代码 | `--font-geist-sans` / `--font-geist-mono`（产品） |
+| 字体：chrome UI（菜单、状态栏） | `--platform-font-ui`（平台） |
+
+### 平台 token 行为约定
+
+- 平台 token 默认值等价于对应的产品 token —— 引入平台 token 层本身**不产生视觉 diff**。
+- macOS 覆盖只在 `html[data-platform="darwin"][data-platform-style="auto"]` 生效。其它平台或 `data-platform-style="neutral"` 时，平台 token 仍 fall back 到默认（= 产品 token 等价值）。
+- **平台 token 不允许出现在内容层**（Apple HIG: Liquid Glass 用于 controls / navigation，不用于 content）。如果在 PR 里看到 `--platform-surface-*` 被绑定到内容卡片，直接 reject。
+
+参考：[`docs/exec-plans/active/phase-7b-macos-native-visual-profile.md`](exec-plans/active/phase-7b-macos-native-visual-profile.md) / [`docs/handover/macos-visual-profile.md`](handover/macos-visual-profile.md)。
+
 ## Page shell
 
 Every Settings sub-page uses the same outer container:

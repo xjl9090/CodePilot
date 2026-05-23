@@ -1,11 +1,8 @@
 "use client";
 
-import { useCallback } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft } from "@/components/ui/icon";
+import { usePathname } from "next/navigation";
 import { CodePilotIcon } from "@/components/ui/semantic-icon";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { TranslationKey } from "@/i18n";
@@ -35,48 +32,25 @@ interface SettingsSidebarProps {
  * (Tasks here, not there) caused a hydration mismatch.
  */
 export function SettingsSidebar({ open, width }: SettingsSidebarProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const { t } = useTranslation();
 
   const activeSection = pathnameToSettingsSection(pathname || "/settings");
 
-  const handleBack = useCallback(() => {
-    // Avoid router.back() — for deep-linked /settings/... entries it can
-    // escape to about:blank. Prefer the recorded last non-settings path
-    // (written by AppShell), with /chat as explicit fallback.
-    if (typeof window !== "undefined") {
-      const last = sessionStorage.getItem("codepilot:last-non-settings-path");
-      if (last && !last.startsWith("/settings")) {
-        router.push(last);
-        return;
-      }
-    }
-    router.push("/chat");
-  }, [router]);
-
   if (!open) return null;
 
   return (
     <aside
-      className="hidden h-full shrink-0 flex-col overflow-hidden bg-sidebar/80 backdrop-blur-xl lg:flex"
+      // Round 18 — Liquid Glass floating-sidebar treatment.
+      data-platform-sidebar="settings"
+      className="hidden h-full shrink-0 flex-col overflow-hidden bg-[var(--platform-surface-sidebar)] backdrop-blur-xl lg:flex"
       style={{ width: width ?? 240 }}
     >
-      {/* macOS traffic lights spacing — match ChatListPanel */}
-      <div className="h-5 shrink-0 mt-3" />
-
-      {/* Back button */}
-      <div className="p-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleBack}
-          className="group w-full justify-start gap-2 h-9 px-3 rounded-xl text-[13px] font-normal text-sidebar-foreground"
-        >
-          <ArrowLeft size={16} />
-          {t("common.back" as TranslationKey)}
-        </Button>
-      </div>
+      {/* Round 33 — back button moved out to UnifiedTopBar's
+          /settings branch so it lives in the same tab bar as the
+          sidebar-toggle button, not inside the sidebar card. Saves
+          ~52px of vertical space at the top of the sidebar and
+          collapses the navigation tighter to the topbar. */}
 
       {/* Section navigation */}
       <div className="p-2 flex flex-col gap-0.5">

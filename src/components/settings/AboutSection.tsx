@@ -165,10 +165,10 @@ export function AboutSection() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-8">
       <div>
-        <h2 className="text-sm font-medium">{t("settings.about" as TranslationKey)}</h2>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
+        <h2 className="text-xl font-semibold tracking-tight">{t("settings.about" as TranslationKey)}</h2>
+        <p className="text-sm text-muted-foreground mt-1.5">
           {t("settings.aboutDesc" as TranslationKey)}
         </p>
       </div>
@@ -193,10 +193,12 @@ export function AboutSection() {
             {updateInfo?.updateAvailable && !checking && (
               updateInfo.readyToInstall ? (
                 <Button size="sm" onClick={quitAndInstall}>
+                  <CodePilotIcon name="refresh" size="sm" aria-hidden />
                   {t("update.restartToUpdate")}
                 </Button>
               ) : updateInfo.isNativeUpdate && !isDownloading ? (
                 <Button size="sm" onClick={downloadUpdate}>
+                  <CodePilotIcon name="download" size="sm" aria-hidden />
                   {t("update.installUpdate")}
                 </Button>
               ) : !updateInfo.isNativeUpdate ? (

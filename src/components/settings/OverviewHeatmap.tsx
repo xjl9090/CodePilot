@@ -323,7 +323,7 @@ export function OverviewHeatmap({ isZh, onJumpToDetails, hideViewDetails = false
         <h3 className="text-sm font-semibold">
           {t("overview.heatmapTitle" as TranslationKey)}
         </h3>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
+        <p className="text-sm text-muted-foreground mt-1.5">
           {isZh
             ? `过去 ${WINDOW_DAYS} 天的每日 token 消耗`
             : `Daily token usage over the past ${WINDOW_DAYS} days`}

@@ -63,12 +63,12 @@ import {
   CheckCircle,
   Circle,
   Code,
-  FloppyDisk,
   SlidersHorizontal,
   SpinnerGap,
   Warning,
   XCircle,
 } from "@/components/ui/icon";
+import { SaveButton } from "@/components/ui/save-button";
 import { CodePilotIcon } from "@/components/ui/semantic-icon";
 import { useClaudeStatus } from "@/hooks/useClaudeStatus";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -335,7 +335,7 @@ function EnginePickerCard({
           <h4 className={cn("text-sm font-semibold", selected ? "text-primary" : "text-foreground")}>
             {title}
           </h4>
-          <p className="text-[11px] text-muted-foreground mt-0.5">{tagline}</p>
+          <p className="text-sm text-muted-foreground mt-1.5">{tagline}</p>
         </div>
       </div>
 
@@ -851,6 +851,12 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
 
   // ── settings.json editor handlers ──
   const hasChanges = JSON.stringify(settings) !== JSON.stringify(originalSettings);
+  // JSON tab dirty: compare current textarea value to a re-serialised
+  // baseline of originalSettings — matches the formatting we set into
+  // jsonText after a fresh load or successful save (see handleSave), so
+  // round-tripping the JSON without semantic edits stays "saved".
+  const originalJsonText = JSON.stringify(originalSettings, null, 2);
+  const jsonDirty = jsonText !== originalJsonText;
 
   const handleSave = async (source: "form" | "json") => {
     let dataToSave: SettingsData;
@@ -1173,11 +1179,11 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-8">
       {/* ── Page header ──────────────────────────────────────────────── */}
       <div>
-        <h2 className="text-sm font-medium">{t("settings.runtime" as TranslationKey)}</h2>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
+        <h2 className="text-xl font-semibold tracking-tight">{t("settings.runtime" as TranslationKey)}</h2>
+        <p className="text-sm text-muted-foreground mt-1.5">
           {isZh
             ? "查看当前 Agent 由谁运行、为什么是这个状态、影响是什么、怎么恢复。Providers 管资产，Models 管暴露，Runtime 管运行环境。"
             : "Inspect which runtime is currently in charge of the Agent — why it's in this state, what the impact is, and how to recover. Providers govern assets, Models govern exposure, Runtime governs environment."}
@@ -1661,15 +1667,11 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
                     </div>
                   ))}
                 <div className="flex items-center gap-2">
-                  <Button
+                  <SaveButton
+                    dirty={hasChanges}
+                    saving={saving}
                     onClick={() => confirmSave("form")}
-                    disabled={!hasChanges || saving}
-                    size="sm"
-                    className="gap-1.5"
-                  >
-                    {saving ? <SpinnerGap size={14} className="animate-spin" /> : <FloppyDisk size={14} />}
-                    {saving ? t("provider.saving") : t("cli.save")}
-                  </Button>
+                  />
                   <Button
                     variant="outline"
                     size="sm"
@@ -1701,15 +1703,11 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
                 />
                 {jsonError && <p className="text-xs text-destructive">{jsonError}</p>}
                 <div className="flex items-center gap-2">
-                  <Button
+                  <SaveButton
+                    dirty={jsonDirty}
+                    saving={saving}
                     onClick={() => confirmSave("json")}
-                    disabled={saving}
-                    size="sm"
-                    className="gap-1.5"
-                  >
-                    {saving ? <SpinnerGap size={14} className="animate-spin" /> : <FloppyDisk size={14} />}
-                    {saving ? t("provider.saving") : t("cli.save")}
-                  </Button>
+                  />
                   <Button variant="outline" size="sm" onClick={handleFormatJson} className="gap-1.5">
                     <Code size={14} />
                     {t("cli.format")}

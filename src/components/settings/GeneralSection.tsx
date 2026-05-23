@@ -132,7 +132,11 @@ export function GeneralSection() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-8">
+      {/* Page title — matches other Settings sub-pages. */}
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">{t('settings.general')}</h2>
+      </div>
       {/* General settings card */}
       <SettingsCard className={skipPermissions ? "border-status-warning-border bg-status-warning-muted" : undefined}>
         {/* Auto-approve toggle */}

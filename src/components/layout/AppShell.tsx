@@ -155,21 +155,37 @@ function ChatContentRow({
   isSplitActive: boolean;
   children: React.ReactNode;
 }) {
-  const { fileTreeOpen } = usePanel();
-  const ws = useWorkspaceSidebarOptional();
-  const railVisible = isChatDetailRoute && (fileTreeOpen || (ws?.state.open ?? false));
+  // Round 20+ — ChatContentRow returns a Fragment so the main
+  // column, workspace sidebar, and panel zone live as direct
+  // children of the outer `data-app-content-row` flex. This lets
+  // the same `gap: 4px` rule that spaces ChatListPanel from
+  // ChatContentRow also space main / workspace / panel from each
+  // other — otherwise the four "floating cards" the user asked
+  // for would have inconsistent spacing (left gutter 4 px,
+  // workspace/panel gutter 0 px).
   return (
-    <div
-      className={`flex flex-1 min-h-0 overflow-hidden ${railVisible ? 'border-t border-border/40' : ''}`}
-    >
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <main className="relative flex-1 overflow-hidden">
-          {isSplitActive ? (
-            <SplitChatContainer />
-          ) : (
-            <ErrorBoundary>{children}</ErrorBoundary>
-          )}
-        </main>
+    <>
+      {/* Round 32 (Codex P1/P2 fix) — main column wrapped in an outer
+          `card-frame` whose only job is `box-shadow + overflow visible`.
+          Inner surface keeps clip-path + radius + bg. Separating
+          these means clip-path can never crop the surrounding shadow,
+          and the shadow can never bleed past the rounded mask. */}
+      <div
+        data-platform-card-frame="main"
+        className="flex min-w-0 flex-1 h-full"
+      >
+        <div
+          data-platform-main-content
+          className="flex flex-1 flex-col overflow-hidden bg-background"
+        >
+          <main className="relative flex-1 overflow-hidden">
+            {isSplitActive ? (
+              <SplitChatContainer />
+            ) : (
+              <ErrorBoundary>{children}</ErrorBoundary>
+            )}
+          </main>
+        </div>
       </div>
       {/* Right rail composition (post-Phase 2, 2026-04-30):
           - WorkspaceSidebar = unified Tab shell. Fixed Git / Widget
@@ -185,7 +201,7 @@ function ChatContentRow({
           mounted at once and the chat area shrinks accordingly. */}
       {isChatDetailRoute && <WorkspaceSidebar />}
       {isChatDetailRoute && <PanelZone />}
-    </div>
+    </>
   );
 }
 
@@ -680,25 +696,60 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <SplitContext.Provider value={splitContextValue}>
         <BatchImageGenContext.Provider value={batchImageGenValue}>
         <TooltipProvider delayDuration={300}>
-          <div className="flex h-screen overflow-hidden">
-            <ErrorBoundary>
-              {pathname.startsWith('/settings') ? (
-                <SettingsSidebar open={chatListOpen} width={chatListWidth} />
-              ) : (
-                <ChatListPanel
-                  open={chatListOpen}
-                  width={chatListWidth}
-                  hasUpdate={updateContextValue.updateInfo?.updateAvailable ?? false}
-                  readyToInstall={updateContextValue.updateInfo?.readyToInstall ?? false}
-                />
-              )}
-            </ErrorBoundary>
-            {chatListOpen && (
-              <ResizeHandle side="left" onResize={handleChatListResize} onResizeEnd={handleChatListResizeEnd} />
-            )}
-            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-              <UnifiedTopBar />
-              <UpdateBanner />
+          {/* Round 20 — layout reorganized so the four floating cards
+              (left sidebar, main content, workspace sidebar, file
+              tree) all start at the same y under a SHARED topbar.
+              Previously the topbar sat inside the main column, which
+              made the left sidebar visually taller than the other
+              three (it included the topbar's vertical space inside
+              its own card). UnifiedTopBar is now a sibling above the
+              content row; traffic-light safe area and sidebar toggle
+              both live there.
+              `data-app-shell` is now on the outer flex-col so
+              globals.css can inset the whole window the same way. */}
+          <div className="flex flex-col h-screen overflow-hidden" data-app-shell>
+            <UnifiedTopBar />
+            <UpdateBanner />
+            <div className="flex flex-1 min-h-0 overflow-hidden" data-app-content-row>
+              {/* Round 22 — wrap left sidebar + its ResizeHandle into a
+                  single flex item so the data-app-content-row gap only
+                  spaces the four floating cards. Previously the handle
+                  was a sibling of ChatListPanel and got its own
+                  `gap: 4px` slot on both sides, making the left-sidebar
+                  → main spacing visibly larger than the other three
+                  gutters. */}
+              <div className="flex h-full shrink-0">
+                {/* Round 32 — outer frame for shadow (overflow visible
+                    so the shadow doesn't get clipped by the surface
+                    element's clip-path). Inner sidebar is the surface. */}
+                {chatListOpen && (
+                  <div data-platform-card-frame="sidebar" className="h-full">
+                    <ErrorBoundary>
+                      {pathname.startsWith('/settings') ? (
+                        <SettingsSidebar open={chatListOpen} width={chatListWidth} />
+                      ) : (
+                        <ChatListPanel
+                          open={chatListOpen}
+                          width={chatListWidth}
+                          hasUpdate={updateContextValue.updateInfo?.updateAvailable ?? false}
+                          readyToInstall={updateContextValue.updateInfo?.readyToInstall ?? false}
+                        />
+                      )}
+                    </ErrorBoundary>
+                  </div>
+                )}
+                {chatListOpen && (
+                  <ResizeHandle
+                    side="left"
+                    onResize={handleChatListResize}
+                    onResizeEnd={handleChatListResizeEnd}
+                    onReset={() => {
+                      setChatListWidth(240);
+                      localStorage.setItem("codepilot_chatlist_width", "240");
+                    }}
+                  />
+                )}
+              </div>
               <ChatContentRow isChatDetailRoute={isChatDetailRoute} isSplitActive={isSplitActive}>
                 {children}
               </ChatContentRow>

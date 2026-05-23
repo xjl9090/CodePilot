@@ -43,5 +43,3 @@ export interface WorkspaceInfo {
 }
 
 export type TabId = 'files' | 'taxonomy' | 'index' | 'organize';
-
-export type PathValidationStatus = 'idle' | 'checking' | 'valid' | 'invalid';

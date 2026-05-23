@@ -1,23 +1,29 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getLocalDateString } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { PromptDialog } from "@/components/ui/prompt-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SpinnerGap, CheckCircle, X } from "@/components/ui/icon";
+import { SpinnerGap } from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
 import { SettingsCard } from "@/components/patterns/SettingsCard";
-import type { WorkspaceInspectResult } from "@/types";
+import type { ChatSession, WorkspaceInspectResult } from "@/types";
 import { FilesTabPanel, TaxonomyTabPanel, IndexTabPanel, OrganizeTabPanel } from "./WorkspaceTabPanels";
 import { WorkspaceConfirmDialogs, type ConfirmDialogType } from "./WorkspaceConfirmDialogs";
 import { OnboardingCard, CheckInCard } from "./WorkspaceStatusCards";
 import { OnboardingWizard } from "@/components/assistant/OnboardingWizard";
 import { AssistantAvatar } from "@/components/ui/AssistantAvatar";
 import type { TranslationKey } from "@/i18n/en";
-import type { TaxonomyCategoryInfo, IndexStats, WorkspaceInfo, TabId, PathValidationStatus } from "./workspace-types";
+import type { TaxonomyCategoryInfo, IndexStats, WorkspaceInfo, TabId } from "./workspace-types";
 
 interface WorkspaceSummary {
   configured: boolean;
@@ -41,14 +47,17 @@ export function AssistantWorkspaceSection() {
   const [initializing, setInitializing] = useState(false);
   const [refreshingDocs, setRefreshingDocs] = useState(false);
   const [pathInput, setPathInput] = useState("");
+  // Recent workspaces — distinct working_directory values from chat
+  // sessions, ordered by most-recent activity. Source for the Select
+  // dropdown so users can jump between project paths they've already
+  // used in CodePilot instead of typing them out.
+  const [recentPaths, setRecentPaths] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>('files');
   const [taxonomy, setTaxonomy] = useState<TaxonomyCategoryInfo[]>([]);
   const [indexStats, setIndexStats] = useState<IndexStats | null>(null);
   const [reindexing, setReindexing] = useState(false);
   const [archiving, setArchiving] = useState(false);
-  const [pathValidation, setPathValidation] = useState<PathValidationStatus>('idle');
   const [pathError, setPathError] = useState<string | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogType | null>(null);
   const [inspecting, setInspecting] = useState(false);
   // Web fallback for the native folder picker. Used when window.electronAPI
@@ -58,7 +67,6 @@ export function AssistantWorkspaceSection() {
   const [pathPromptOpen, setPathPromptOpen] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const [summary, setSummary] = useState<WorkspaceSummary | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const fetchWorkspace = useCallback(async () => {
     try {
@@ -105,9 +113,31 @@ export function AssistantWorkspaceSection() {
     } catch { /* ignore */ }
   }, []);
 
+  const fetchRecentPaths = useCallback(async () => {
+    try {
+      const res = await fetch("/api/chat/sessions");
+      if (res.ok) {
+        const data = await res.json();
+        const sessions: ChatSession[] = data.sessions || [];
+        // Distinct working_directory, ordered by most-recent session
+        // updated_at — same data ChatListPanel uses to group projects.
+        const seen = new Set<string>();
+        const ordered: string[] = [];
+        for (const s of [...sessions].sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))) {
+          const wd = s.working_directory?.trim();
+          if (!wd || seen.has(wd)) continue;
+          seen.add(wd);
+          ordered.push(wd);
+        }
+        setRecentPaths(ordered);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     fetchWorkspace();
-  }, [fetchWorkspace]);
+    fetchRecentPaths();
+  }, [fetchWorkspace, fetchRecentPaths]);
 
   useEffect(() => {
     if (workspace?.path && workspace.valid !== false) {
@@ -119,59 +149,6 @@ export function AssistantWorkspaceSection() {
     if (workspace?.path && activeTab === 'taxonomy') fetchTaxonomy();
     if (workspace?.path && activeTab === 'index') fetchIndexStats();
   }, [workspace?.path, activeTab, fetchTaxonomy, fetchIndexStats]);
-
-  // Debounced path validation
-  const validatePath = useCallback((path: string) => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    setPathError(null);
-
-    if (!path.trim()) {
-      setPathValidation('idle');
-      return;
-    }
-
-    setPathValidation('checking');
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/workspace/inspect?path=${encodeURIComponent(path.trim())}`);
-        if (!res.ok) {
-          setPathValidation('invalid');
-          setPathError(t('assistant.inspectFailed'));
-          return;
-        }
-        const data: WorkspaceInspectResult = await res.json();
-        if (!data.exists) {
-          setPathValidation('valid');
-        } else if (!data.isDirectory) {
-          setPathValidation('invalid');
-          setPathError(t('assistant.pathNotDirectory'));
-        } else if (!data.readable) {
-          setPathValidation('invalid');
-          setPathError(t('assistant.pathNotReadable'));
-        } else if (!data.writable) {
-          setPathValidation('invalid');
-          setPathError(t('assistant.pathNotWritable'));
-        } else {
-          setPathValidation('valid');
-        }
-      } catch {
-        setPathValidation('invalid');
-        setPathError(t('assistant.inspectFailed'));
-      }
-    }, 500);
-  }, [t]);
-
-  // Clean up debounce on unmount
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
-
-  const handlePathInputChange = useCallback((value: string) => {
-    setPathInput(value);
-    validatePath(value);
-  }, [validatePath]);
 
   // Execute the actual save + optional auto-navigate
   const executeSave = useCallback(async (initialize: boolean, resetOnboarding?: boolean, navigateMode: 'new' | 'reuse' = 'new') => {
@@ -222,16 +199,20 @@ export function AssistantWorkspaceSection() {
     }
   }, [pathInput, fetchWorkspace, workspace?.path, router]);
 
-  // Inspect path and show confirmation dialog
-  const handleSaveClick = useCallback(async () => {
-    if (!pathInput.trim()) return;
-    if (pathInput.trim() === workspace?.path) return;
+  // Inspect path and show confirmation dialog. Accepts an explicit
+  // path so Select-driven changes can pass the freshly-picked value
+  // before React commits the setPathInput update — avoiding a stale
+  // closure read.
+  const handleSaveClick = useCallback(async (explicitPath?: string) => {
+    const target = (explicitPath ?? pathInput).trim();
+    if (!target) return;
+    if (target === workspace?.path) return;
 
     setInspecting(true);
+    setPathError(null);
     try {
-      const res = await fetch(`/api/workspace/inspect?path=${encodeURIComponent(pathInput.trim())}`);
+      const res = await fetch(`/api/workspace/inspect?path=${encodeURIComponent(target)}`);
       if (!res.ok) {
-        setPathValidation('invalid');
         setPathError(t('assistant.inspectFailed'));
         return;
       }
@@ -242,17 +223,14 @@ export function AssistantWorkspaceSection() {
         return;
       }
       if (!data.isDirectory) {
-        setPathValidation('invalid');
         setPathError(t('assistant.pathNotDirectory'));
         return;
       }
       if (!data.readable) {
-        setPathValidation('invalid');
         setPathError(t('assistant.pathNotReadable'));
         return;
       }
       if (!data.writable) {
-        setPathValidation('invalid');
         setPathError(t('assistant.pathNotWritable'));
         return;
       }
@@ -274,12 +252,10 @@ export function AssistantWorkspaceSection() {
           setConfirmDialog({ kind: 'partial_workspace' });
           break;
         default:
-          setPathValidation('invalid');
           setPathError(t('assistant.pathInvalid'));
       }
     } catch (e) {
       console.error("Failed to inspect workspace:", e);
-      setPathValidation('invalid');
       setPathError(t('assistant.inspectFailed'));
     } finally {
       setInspecting(false);
@@ -291,8 +267,12 @@ export function AssistantWorkspaceSection() {
       if (window.electronAPI?.dialog?.openFolder) {
         const result = await window.electronAPI.dialog.openFolder({ title: t('assistant.selectFolder') });
         if (!result.canceled && result.filePaths[0]) {
-          setPathInput(result.filePaths[0]);
-          validatePath(result.filePaths[0]);
+          const picked = result.filePaths[0];
+          setPathInput(picked);
+          // Auto-trigger save flow — same as Select onChange path.
+          // confirmDialog still surfaces inside handleSaveClick for
+          // empty / partial / existing-workspace safety checks.
+          handleSaveClick(picked);
         }
       } else {
         // Web fallback (no Electron) — open the PromptDialog. Previously
@@ -303,7 +283,7 @@ export function AssistantWorkspaceSection() {
     } catch (e) {
       console.error("Failed to select folder:", e);
     }
-  }, [validatePath, t]);
+  }, [handleSaveClick, t]);
 
   const handleRefreshDocs = useCallback(async () => {
     setRefreshingDocs(true);
@@ -350,6 +330,15 @@ export function AssistantWorkspaceSection() {
     }
   }, []);
 
+  // Must stay above any early returns — Rules of Hooks. Earlier this
+  // sat next to its consumer in the JSX, which broke hook order on the
+  // initial loading-state render.
+  const handleSelectChange = useCallback((next: string) => {
+    if (!next || next === workspace?.path) return;
+    setPathInput(next);
+    handleSaveClick(next);
+  }, [workspace?.path, handleSaveClick]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -368,65 +357,64 @@ export function AssistantWorkspaceSection() {
     { id: 'organize', label: t('assistant.organizeTitle') },
   ];
 
-  // Render path validation indicator
-  const renderValidationIcon = () => {
-    switch (pathValidation) {
-      case 'checking':
-        return <SpinnerGap size={16} className="animate-spin text-muted-foreground" />;
-      case 'valid':
-        return <CheckCircle size={16} className="text-status-success-foreground" />;
-      case 'invalid':
-        return <X size={16} className="text-status-error-foreground" />;
-      default:
-        return null;
-    }
-  };
-
   const assistantName = summary?.name || t('assistant.defaultName');
 
+  // Path Select drops the per-keystroke validation (the select can only
+  // produce paths we already know — either from `recentPaths` or the
+  // native folder picker — so debounced inspect is redundant). The
+  // workspaceStatus inspect still runs inside handleSaveClick before
+  // any destructive change.
+  const currentPath = pathInput || workspace?.path || "";
+  // Include the active workspace path itself, even when no chat session
+  // is tied to it yet, so the Select always shows the current selection.
+  const selectOptions = [
+    ...(currentPath && !recentPaths.includes(currentPath) ? [currentPath] : []),
+    ...recentPaths,
+  ];
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Workspace Path Card */}
+    <div className="max-w-4xl mx-auto space-y-8">
+      {/* Page title — matches the style of other Settings sub-pages. */}
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">{t('settings.assistant' as TranslationKey)}</h2>
+      </div>
+      {/* Workspace Path Card — Select-driven: pick a recent project
+          or use "选择文件夹" for a new one. Both paths immediately
+          trigger handleSaveClick, which still surfaces the confirm
+          dialog for empty / partial / existing-workspace safety. */}
       <SettingsCard
         title={t('assistant.workspacePath')}
         description={t('assistant.workspacePathHint')}
       >
         <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Input
-              type="text"
-              value={pathInput}
-              onChange={(e) => handlePathInputChange(e.target.value)}
-              placeholder="/path/to/workspace"
-              className="pr-8"
-            />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2">
-              {renderValidationIcon()}
-            </div>
-          </div>
-          <Button variant="outline" size="sm" onClick={handleSelectFolder}>
+          <Select value={currentPath} onValueChange={handleSelectChange} disabled={inspecting}>
+            <SelectTrigger className="flex-1 text-sm">
+              <SelectValue placeholder="/path/to/workspace" />
+            </SelectTrigger>
+            <SelectContent>
+              {selectOptions.length === 0 ? (
+                <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                  {t('assistant.selectFolder')}
+                </div>
+              ) : (
+                selectOptions.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {p}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" onClick={handleSelectFolder} disabled={inspecting}>
+            {inspecting ? (
+              <SpinnerGap size={14} className="animate-spin" />
+            ) : null}
             {t('assistant.selectFolder')}
           </Button>
         </div>
         {pathError && (
           <p className="text-xs text-status-error-foreground mt-1">{pathError}</p>
         )}
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            onClick={handleSaveClick}
-            disabled={!pathInput.trim() || inspecting || pathValidation === 'invalid'}
-          >
-            {inspecting ? (
-              <>
-                <SpinnerGap size={14} className="animate-spin mr-1" />
-                {t('assistant.inspecting')}
-              </>
-            ) : (
-              t('common.save')
-            )}
-          </Button>
-        </div>
       </SettingsCard>
 
       {/* Invalid workspace path warning */}
@@ -544,34 +532,20 @@ export function AssistantWorkspaceSection() {
           Assistant-page link added IA noise without surfacing
           assistant-specific information). */}
 
-      {/* Tabbed Section: Files (default) + Advanced (Taxonomy / Index / Organize).
-          Uses shadcn <Tabs> with controlled value so the existing
-          `setActiveTab` state still drives which panel renders. The
-          previous hand-rolled tab bar (`border-b-2 border-primary` on
-          active button) is now the project-standard rounded-full pill. */}
+      {/* Tabbed Section: Files + Taxonomy / Index / Organize. All tabs
+          render in the tab strip — the prior "+/−" toggle that hid the
+          advanced three behind a collapse was extra friction with no
+          payoff. */}
       {workspace?.path && workspace.valid !== false && (
         <SettingsCard>
-          <div className="flex items-center gap-2 mb-1">
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="flex-1">
-              <TabsList>
-                <TabsTrigger value="files">{defaultTab.label}</TabsTrigger>
-                {showAdvanced && advancedTabs.map(tab => (
-                  <TabsTrigger key={tab.id} value={tab.id}>{tab.label}</TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-[11px] text-muted-foreground hover:text-foreground h-7"
-              onClick={() => {
-                setShowAdvanced((prev) => !prev);
-                if (showAdvanced && activeTab !== 'files') setActiveTab('files');
-              }}
-            >
-              {showAdvanced ? '−' : '+'} {t('assistant.advanced')}
-            </Button>
-          </div>
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="mb-1">
+            <TabsList>
+              <TabsTrigger value="files">{defaultTab.label}</TabsTrigger>
+              {advancedTabs.map(tab => (
+                <TabsTrigger key={tab.id} value={tab.id}>{tab.label}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
 
           {activeTab === 'files' && (
             <FilesTabPanel
@@ -580,17 +554,17 @@ export function AssistantWorkspaceSection() {
               onRefreshDocs={handleRefreshDocs}
             />
           )}
-          {showAdvanced && activeTab === 'taxonomy' && (
+          {activeTab === 'taxonomy' && (
             <TaxonomyTabPanel taxonomy={taxonomy} />
           )}
-          {showAdvanced && activeTab === 'index' && (
+          {activeTab === 'index' && (
             <IndexTabPanel
               indexStats={indexStats}
               reindexing={reindexing}
               onReindex={handleReindex}
             />
           )}
-          {showAdvanced && activeTab === 'organize' && (
+          {activeTab === 'organize' && (
             <OrganizeTabPanel
               archiving={archiving}
               onArchive={handleArchive}
@@ -635,7 +609,7 @@ export function AssistantWorkspaceSection() {
         cancelLabel={t('common.cancel' as TranslationKey)}
         onConfirm={(value) => {
           setPathInput(value);
-          validatePath(value);
+          handleSaveClick(value);
         }}
       />
     </div>

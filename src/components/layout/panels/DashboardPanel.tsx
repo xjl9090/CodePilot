@@ -509,16 +509,6 @@ function getRequiredMemories(rarity: string): number {
   return reqs[rarity] || 100;
 }
 
-function rarityBorderClass(rarity: string): string {
-  switch (rarity) {
-    case 'legendary': return 'border-amber-500/30 shadow-amber-500/10 shadow-md';
-    case 'epic': return 'border-purple-500/30';
-    case 'rare': return 'border-blue-500/30';
-    case 'uncommon': return 'border-green-500/30';
-    default: return 'border-primary/10';
-  }
-}
-
 /** Built-in assistant status card — injected at the top of assistant workspace dashboards. */
 function AssistantStatusCard({ summary, t }: {
   summary: AssistantSummary;
@@ -526,12 +516,14 @@ function AssistantStatusCard({ summary, t }: {
 }) {
   const router = useRouter();
   const buddy = summary.buddy;
-  const cardBorder = buddy
-    ? rarityBorderClass(buddy.rarity)
-    : 'border-primary/10';
 
+  // Round 31.1 — outer accent ring removed entirely. User feedback:
+  // even the muted rarity ring (ring-1 / 30% alpha) read as a colored
+  // "selected" outline that broke the card's blend-in look. Rarity is
+  // still expressed via the inline rarity badge in the header (see
+  // line below — RARITY_DISPLAY stars + label inside a colored chip).
   return (
-    <div className={cn('rounded-lg border bg-primary/[0.03] p-3 space-y-3', cardBorder)}>
+    <div className={cn('rounded-xl bg-muted/20 p-4 space-y-3')}>
       {/* Header: 3D image + Name + Species + Rarity + Settings gear */}
       <div className="flex items-center gap-2">
         {buddy ? (

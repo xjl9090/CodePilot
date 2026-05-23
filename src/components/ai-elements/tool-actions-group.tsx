@@ -106,8 +106,14 @@ const TOOL_REGISTRY: ToolRendererDef[] = [
         return outputText;
       })();
 
+      // Round 15 (2026-05-23): bumped from `rounded` (4px, reads as
+      // sharp at this size) to `rounded-lg` (8px) so the bash command
+      // card aligns with the project's sub-card radius scale. Outer
+      // Widget / Markdown cards use rounded-xl (12px); inline
+      // tool-output sub-cards sit one tier inside them, so rounded-lg
+      // is the right step down.
       return (
-        <div className="mt-1 rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground/80 max-h-[140px] overflow-auto whitespace-pre-wrap break-all">
+        <div className="mt-1 rounded-lg bg-muted/40 px-2.5 py-2 font-mono text-[11px] text-muted-foreground/80 max-h-[140px] overflow-auto whitespace-pre-wrap break-all">
           {cmd && <div className="text-foreground/70">$ {cmd}</div>}
           {displayLines && (
             <div className={cn("mt-1", isRunning ? "text-muted-foreground/50" : "text-muted-foreground/60")}>
@@ -574,11 +580,18 @@ export function ToolActionsGroup({
 
   return (
     <div className="w-[min(100%,48rem)]">
-      {/* Header — content left, caret right */}
+      {/* Header — content left, caret right.
+          Round 12 fix: was `py-1 rounded-sm` with NO horizontal
+          padding, so the inner count badge sat flush against the
+          button's left edge and the hover-bg `rounded-sm` (2px)
+          curve cut into the badge's own `rounded` (4px). Visually
+          this read as "图标露在 hover 区外". `px-2` + `rounded-md`
+          (6px) keeps the badge inside the hover surface and matches
+          the curve scale across nested elements. */}
       <button
         type="button"
         onClick={handleToggle}
-        className="flex w-full items-center gap-2 py-1 text-xs rounded-sm hover:bg-muted/30 transition-colors"
+        className="flex w-full items-center gap-2 px-2 py-1 text-xs rounded-md hover:bg-muted/30 transition-colors"
       >
         <span className="inline-flex items-center justify-center rounded bg-muted/80 px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground/70 tabular-nums">
           {tools.length + (thinkingContent ? 1 : 0)}

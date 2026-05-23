@@ -434,32 +434,20 @@ export function ChatListPanel({ open, width, hasUpdate, readyToInstall }: ChatLi
 
   return (
     <aside
-      className="hidden h-full shrink-0 flex-col overflow-hidden bg-sidebar/80 backdrop-blur-xl lg:flex"
+      // Round 18 — data-platform-sidebar marks this as a navigation-
+      // layer surface so globals.css can give it the macOS Liquid
+      // Glass floating-sidebar treatment (rounded card + shadow +
+      // material) above the flat content layer. Web shell ignores it.
+      data-platform-sidebar="chat-list"
+      className="hidden h-full shrink-0 flex-col overflow-hidden bg-[var(--platform-surface-sidebar)] backdrop-blur-xl lg:flex"
       style={{ width: width ?? 240 }}
     >
-      {/* Top bar — macOS traffic lights spacing on the left + collapse
-          toggle on the right. Clicking the toggle calls setChatListOpen(false);
-          re-opening lives in UnifiedTopBar so the user always has a way
-          back when the panel is hidden. */}
-      <div className="flex h-8 shrink-0 items-center justify-end pr-1.5 mt-3">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setChatListOpen(false)}
-              aria-label={t('chatList.collapseSidebar' as TranslationKey)}
-              className="text-sidebar-foreground/60 hover:text-sidebar-foreground"
-            >
-              <CodePilotIcon name="panel_left_close" size="md" className="text-inherit" aria-hidden />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            {t('chatList.collapseSidebar' as TranslationKey)}
-          </TooltipContent>
-        </Tooltip>
-      </div>
+      {/* Round 20 — the h-12 traffic-light-safe-area + collapse
+          button used to live at the top of this panel. Both moved
+          to UnifiedTopBar so the four floating cards (this sidebar,
+          main, workspace, file tree) share the same y-origin under
+          the topbar. Sidebar toggle is now the topbar's
+          `sidebarToggleButton` (handles open AND close). */}
 
       {/* Quick actions + feature nav (Codex-style unified list) */}
       <div className="p-2">

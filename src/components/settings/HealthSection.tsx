@@ -85,12 +85,12 @@ export function HealthSection() {
   // first fetch resolves.
   if (state.loading) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-4xl mx-auto space-y-8">
         <div>
-          <h2 className="text-sm font-medium">
+          <h2 className="text-xl font-semibold tracking-tight">
             {t("settings.health" as TranslationKey)}
           </h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <p className="text-sm text-muted-foreground mt-1.5">
             {t("settings.healthDesc" as TranslationKey)}
           </p>
         </div>
@@ -357,14 +357,14 @@ export function HealthSection() {
         : (isZh ? "存在阻塞问题" : "Blocking issues detected");
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-medium">
+          <h2 className="text-xl font-semibold tracking-tight">
             {t("settings.health" as TranslationKey)}
           </h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <p className="text-sm text-muted-foreground mt-1.5">
             {t("settings.healthDesc" as TranslationKey)}
           </p>
         </div>
@@ -396,7 +396,7 @@ export function HealthSection() {
             <h3 className="text-sm font-medium">
               {isZh ? "需要进一步排查？" : "Need to investigate further?"}
             </h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+            <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
               {isZh
                 ? "如果上方状态没有解释你遇到的问题，去 关于 页面导出诊断包，里面包含运行日志、provider 解析链与连接探测结果，便于本地排查或随 issue 一起反馈。"
                 : "If the rows above don't explain what you're seeing, head to About to export a diagnostic bundle — it includes runtime logs, the provider-resolution chain, and probe results for local investigation or issue filing."}
@@ -428,7 +428,7 @@ function HealthRowItem({ row }: { row: HealthRow }) {
         </div>
         <p className="text-xs text-foreground/85 mt-1 leading-relaxed">{row.reason}</p>
         {row.impact && (
-          <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+          <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
             {row.impact}
           </p>
         )}

@@ -360,8 +360,16 @@ export function FileTreePanel({ variant = 'legacy' }: { variant?: 'legacy' | 'si
   // legacy variant: original right-rail panel chrome.
   return (
     <div className="flex h-full shrink-0 overflow-hidden">
-      <ResizeHandle side="left" onResize={handleResize} />
-      <div className="flex h-full flex-1 flex-col overflow-hidden border-r border-border/40 bg-background" style={{ width }}>
+      <ResizeHandle
+        side="left"
+        onResize={handleResize}
+        onReset={() => setWidth(TREE_DEFAULT_WIDTH)}
+      />
+      <div
+        data-platform-file-tree
+        className="flex h-full flex-1 flex-col overflow-hidden bg-background"
+        style={{ width }}
+      >
         <div className="flex h-10 shrink-0 items-center justify-between px-3">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             {t("panel.files")}

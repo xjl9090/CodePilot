@@ -77,6 +77,10 @@ export const McpManager = forwardRef<McpManagerHandle, McpManagerProps>(function
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailName, setDetailName] = useState<string | null>(null);
   const [detailServer, setDetailServer] = useState<MCPServer | null>(null);
+  // Reflect the JSON-tab PUT in flight so the ConfigEditor SaveButton
+  // can render the saving state instead of silently letting users
+  // double-click and fire multiple requests.
+  const [jsonSaving, setJsonSaving] = useState(false);
 
   function handleOpenDetail(name: string, server: MCPServer) {
     setDetailName(name);
@@ -250,6 +254,7 @@ export const McpManager = forwardRef<McpManagerHandle, McpManagerProps>(function
   }
 
   async function handleJsonSave(jsonStr: string) {
+    setJsonSaving(true);
     try {
       const parsed = JSON.parse(jsonStr) as Record<string, MCPServer>;
       // JSON editor only manages settings.json servers.
@@ -273,6 +278,8 @@ export const McpManager = forwardRef<McpManagerHandle, McpManagerProps>(function
       setServers(merged);
     } catch (err) {
       console.error("Failed to save MCP config:", err);
+    } finally {
+      setJsonSaving(false);
     }
   }
 
@@ -580,6 +587,7 @@ export const McpManager = forwardRef<McpManagerHandle, McpManagerProps>(function
               2,
             )}
             onSave={handleJsonSave}
+            saving={jsonSaving}
             label={t('mcp.serverConfig')}
           />
         </TabsContent>

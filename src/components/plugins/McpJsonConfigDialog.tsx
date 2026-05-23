@@ -48,6 +48,7 @@ export function McpJsonConfigDialog({
   const { t } = useTranslation();
   const [snapshot, setSnapshot] = useState<Record<string, ServerWithSource> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // Fetch on every open so the editor shows current state, even when
   // the MCP manager is not mounted (Skills / CLI filter tabs).
@@ -101,18 +102,23 @@ export function McpJsonConfigDialog({
       }
     }
 
-    const res = await fetch("/api/plugins/mcp", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mcpServers: next }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data?.error || `HTTP ${res.status}`);
-      return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/plugins/mcp", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mcpServers: next }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data?.error || `HTTP ${res.status}`);
+        return;
+      }
+      onSaved?.();
+      onOpenChange(false);
+    } finally {
+      setSaving(false);
     }
-    onSaved?.();
-    onOpenChange(false);
   };
 
   const claudeJsonNoticeNeeded =
@@ -165,6 +171,7 @@ export function McpJsonConfigDialog({
               <ConfigEditor
                 value={editableJson}
                 onSave={handleSave}
+                saving={saving}
                 label={t("mcp.serverConfig" as TranslationKey)}
               />
             )}

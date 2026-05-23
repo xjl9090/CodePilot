@@ -173,10 +173,10 @@ export function AppearanceSection() {
     // / GeneralSection. AppearanceSection used to render inline at the
     // bottom of GeneralSection; promotion to a sibling sidebar entry needs
     // its own page-shell width + spacing so it doesn't read as half-width.
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-8">
       {/* Section header — outside card */}
       <div>
-        <h2 className="text-sm font-medium">{t("settings.appearance")}</h2>
+        <h2 className="text-xl font-semibold tracking-tight">{t("settings.appearance")}</h2>
         <p className="text-xs text-muted-foreground">{t("settings.appearanceDesc")}</p>
       </div>
 

@@ -30,6 +30,7 @@ import {
   useState,
 } from "react";
 import { Streamdown } from "streamdown";
+import { CHAT_MARKDOWN_COMPONENTS } from "@/components/chat/markdown-components";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -338,13 +339,19 @@ const _codePlugin = createSharedCodePlugin();
 const streamdownPlugins = { cjk, code: _codePlugin, math, mermaid };
 
 export const MessageResponse = memo(
-  ({ className, ...props }: MessageResponseProps) => (
+  ({ className, components, ...props }: MessageResponseProps) => (
     <Streamdown
       className={cn(
         "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
       plugins={streamdownPlugins}
+      // Round 12 chat UI refresh — every markdown element rendered
+      // here goes through CHAT_MARKDOWN_COMPONENTS so tables, code
+      // blocks, headings, lists, etc. all match the Widget-card
+      // design language. Callers can still override individual
+      // elements via the `components` prop (last-write-wins).
+      components={{ ...CHAT_MARKDOWN_COMPONENTS, ...components }}
       {...props}
     />
   ),

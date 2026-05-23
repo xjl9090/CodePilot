@@ -1,4 +1,17 @@
 /**
+ * v11 → v13 → round 7+ right-rail policy + layout history.
+ *
+ * Round 7+ (2026-05-23) note: ChatContentRow used to derive a
+ * `railVisible = fileTreeOpen || ws?.state.open` flag and only paint
+ * a `border-t` between the topbar and the work area when a rail was
+ * actually visible. The macOS-vibrancy refresh wrapped the whole row
+ * in a single rounded card with unconditional top/bottom borders, so
+ * `railVisible` is dead and the assertion that used to pin it was
+ * removed from this file. The "additive rails" invariants below are
+ * still authoritative — only the conditional-border test went away.
+ *
+ * --- Original v11 → v13 history below ---
+ *
  * v11 → v13 right-rail policy reversal.
  *
  * v11 added a `RightRailMutexEnforcer` and pinned both topbar
@@ -140,15 +153,9 @@ describe('right-rail panels are additive — neither button forces the other to 
     );
   });
 
-  it('the rail-visible flag in ChatContentRow still triggers on EITHER panel (not just one)', () => {
-    // The thin border-t between topbar chrome and the work area
-    // appears whenever any rail is visible. With additive rails this
-    // boolean must remain `fileTreeOpen || ws.state.open` — switching
-    // to `&&` would hide the border whenever only one rail is open.
-    assert.match(
-      APPSHELL_CODE,
-      /railVisible\s*=\s*[^;]*fileTreeOpen[^;]*\|\|[^;]*ws\?\.state\.open/,
-      'ChatContentRow railVisible must use `||` (either rail open shows the border) so the visual cue still works with both additive states',
-    );
-  });
+  // Round 7+ (2026-05-23): the previous "rail-visible flag uses `||`"
+  // assertion was removed. ChatContentRow no longer derives such a
+  // flag — the wrapper card ships unconditional top/bottom borders
+  // regardless of which rails are open. See the file header for
+  // context.
 });

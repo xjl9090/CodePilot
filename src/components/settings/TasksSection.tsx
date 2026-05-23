@@ -30,6 +30,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { TranslationKey } from "@/i18n";
 import { Button } from "@/components/ui/button";
+import { CodePilotIcon } from "@/components/ui/semantic-icon";
 import { cn } from "@/lib/utils";
 
 interface TaskRow {
@@ -225,16 +226,21 @@ export function TasksSection() {
   }, [tasks, focusId]);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-8">
       <div>
-        <h2 className="text-sm font-medium">{t("settings.tasks" as TranslationKey)}</h2>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
+        <h2 className="text-xl font-semibold tracking-tight">{t("settings.tasks" as TranslationKey)}</h2>
+        <p className="text-sm text-muted-foreground mt-1.5">
           {t("settings.tasksDesc" as TranslationKey)}
         </p>
       </div>
 
-      <div className="flex items-center justify-end">
+      {/* Single button row — left-align since there's no sibling on the
+          left. Earlier `justify-end` made the button float over to the
+          right corner alone, which felt detached from the page title /
+          description. */}
+      <div className="flex items-center justify-start">
         <Button size="sm" onClick={handleNewTaskInChat}>
+          <CodePilotIcon name="plus" size="sm" aria-hidden />
           {t("tasks.create" as TranslationKey)}
         </Button>
       </div>

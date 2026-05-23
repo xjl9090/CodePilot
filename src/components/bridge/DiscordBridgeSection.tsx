@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { SpinnerGap, CheckCircle, Warning } from "@/components/ui/icon";
+import { SaveButton } from "@/components/ui/save-button";
 import { useTranslation } from "@/hooks/useTranslation";
 import { SettingsCard } from "@/components/patterns/SettingsCard";
 import { FieldRow } from "@/components/patterns/FieldRow";
@@ -59,6 +60,27 @@ export function DiscordBridgeSection() {
   } | null>(null);
   const { t } = useTranslation();
 
+  // Two save groups → two snapshots. botToken is server-masked as "***…"
+  // (see handleSaveCredentials — only sent when the user types a real
+  // value), so the credentials snapshot mirrors that mask.
+  const [savedCredentials, setSavedCredentials] = useState({ botToken: "" });
+  const [savedGroupSettings, setSavedGroupSettings] = useState({
+    allowedUsers: "",
+    allowedChannels: "",
+    allowedGuilds: "",
+    groupPolicy: "open",
+    requireMention: false,
+    streamEnabled: true,
+  });
+  const credentialsDirty = botToken !== savedCredentials.botToken;
+  const groupSettingsDirty =
+    allowedUsers !== savedGroupSettings.allowedUsers ||
+    allowedChannels !== savedGroupSettings.allowedChannels ||
+    allowedGuilds !== savedGroupSettings.allowedGuilds ||
+    groupPolicy !== savedGroupSettings.groupPolicy ||
+    requireMention !== savedGroupSettings.requireMention ||
+    streamEnabled !== savedGroupSettings.streamEnabled;
+
   const fetchSettings = useCallback(async () => {
     try {
       const res = await fetch("/api/settings/discord");
@@ -70,9 +92,21 @@ export function DiscordBridgeSection() {
         setAllowedUsers(s.bridge_discord_allowed_users);
         setAllowedChannels(s.bridge_discord_allowed_channels);
         setAllowedGuilds(s.bridge_discord_allowed_guilds);
-        setGroupPolicy(s.bridge_discord_group_policy || "open");
-        setRequireMention(s.bridge_discord_require_mention === "true");
-        setStreamEnabled(s.bridge_discord_stream_enabled !== "false");
+        const policy = s.bridge_discord_group_policy || "open";
+        const mention = s.bridge_discord_require_mention === "true";
+        const stream = s.bridge_discord_stream_enabled !== "false";
+        setGroupPolicy(policy);
+        setRequireMention(mention);
+        setStreamEnabled(stream);
+        setSavedCredentials({ botToken: s.bridge_discord_bot_token });
+        setSavedGroupSettings({
+          allowedUsers: s.bridge_discord_allowed_users,
+          allowedChannels: s.bridge_discord_allowed_channels,
+          allowedGuilds: s.bridge_discord_allowed_guilds,
+          groupPolicy: policy,
+          requireMention: mention,
+          streamEnabled: stream,
+        });
       }
     } catch {
       // ignore
@@ -83,7 +117,9 @@ export function DiscordBridgeSection() {
     fetchSettings();
   }, [fetchSettings]);
 
-  const saveSettings = async (updates: Partial<DiscordBridgeSettings>) => {
+  const saveSettings = async (
+    updates: Partial<DiscordBridgeSettings>,
+  ): Promise<boolean> => {
     setSaving(true);
     try {
       const res = await fetch("/api/settings/discord", {
@@ -93,24 +129,39 @@ export function DiscordBridgeSection() {
       });
       if (res.ok) {
         setSettings((prev) => ({ ...prev, ...updates }));
+        return true;
       }
+      return false;
     } catch {
-      // ignore
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
-  const handleSaveCredentials = () => {
+  const handleSaveCredentials = async () => {
     const updates: Partial<DiscordBridgeSettings> = {};
-    if (botToken && !botToken.startsWith("***")) {
+    // Three-way token handling: mask kept = omit / empty = explicit
+    // clear / real value = send. Empty case lets the user remove a
+    // saved token via the UI, which the old `if (token && ...)`
+    // gate silently dropped.
+    if (botToken === "") {
+      updates.bridge_discord_bot_token = "";
+    } else if (!botToken.startsWith("***")) {
       updates.bridge_discord_bot_token = botToken;
     }
-    saveSettings(updates);
+    const ok = await saveSettings(updates);
+    if (ok) {
+      // Baseline from current form state, not updates: when the mask
+      // stayed untouched `updates.bridge_discord_bot_token` is undefined,
+      // and using that to rebuild the snapshot would silently drop the
+      // mask and leave the button stuck on "保存".
+      setSavedCredentials({ botToken });
+    }
   };
 
-  const handleSaveGroupSettings = () => {
-    saveSettings({
+  const handleSaveGroupSettings = async () => {
+    const ok = await saveSettings({
       bridge_discord_allowed_users: allowedUsers,
       bridge_discord_allowed_channels: allowedChannels,
       bridge_discord_allowed_guilds: allowedGuilds,
@@ -118,6 +169,16 @@ export function DiscordBridgeSection() {
       bridge_discord_require_mention: requireMention ? "true" : "false",
       bridge_discord_stream_enabled: streamEnabled ? "true" : "false",
     });
+    if (ok) {
+      setSavedGroupSettings({
+        allowedUsers,
+        allowedChannels,
+        allowedGuilds,
+        groupPolicy,
+        requireMention,
+        streamEnabled,
+      });
+    }
   };
 
   const handleVerify = async () => {
@@ -182,9 +243,11 @@ export function DiscordBridgeSection() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={handleSaveCredentials} disabled={saving}>
-            {saving ? t("common.loading") : t("common.save")}
-          </Button>
+          <SaveButton
+            dirty={credentialsDirty}
+            saving={saving}
+            onClick={handleSaveCredentials}
+          />
           <Button
             size="sm"
             variant="outline"
@@ -311,9 +374,11 @@ export function DiscordBridgeSection() {
           </FieldRow>
         </div>
 
-        <Button size="sm" onClick={handleSaveGroupSettings} disabled={saving}>
-          {saving ? t("common.loading") : t("common.save")}
-        </Button>
+        <SaveButton
+          dirty={groupSettingsDirty}
+          saving={saving}
+          onClick={handleSaveGroupSettings}
+        />
       </SettingsCard>
 
       {/* Setup Guide */}

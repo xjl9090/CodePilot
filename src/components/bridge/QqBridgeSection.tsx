@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { SpinnerGap, CheckCircle, Warning } from "@/components/ui/icon";
+import { SaveButton } from "@/components/ui/save-button";
 import { useTranslation } from "@/hooks/useTranslation";
 import { SettingsCard } from "@/components/patterns/SettingsCard";
 import { FieldRow } from "@/components/patterns/FieldRow";
@@ -41,6 +42,26 @@ export function QqBridgeSection() {
   } | null>(null);
   const { t } = useTranslation();
 
+  // Three save groups → three snapshots. appSecret is server-masked as
+  // "***…" — see handleSaveCredentials, only sent when the user types a
+  // real value — so the credentials snapshot mirrors that mask.
+  const [savedCredentials, setSavedCredentials] = useState({
+    appId: "",
+    appSecret: "",
+  });
+  const [savedAllowedUsers, setSavedAllowedUsers] = useState("");
+  const [savedImageSettings, setSavedImageSettings] = useState({
+    imageEnabled: true,
+    maxImageSize: "20",
+  });
+  const credentialsDirty =
+    appId !== savedCredentials.appId ||
+    appSecret !== savedCredentials.appSecret;
+  const allowedUsersDirty = allowedUsers !== savedAllowedUsers;
+  const imageSettingsDirty =
+    imageEnabled !== savedImageSettings.imageEnabled ||
+    maxImageSize !== savedImageSettings.maxImageSize;
+
   const fetchSettings = useCallback(async () => {
     try {
       const res = await fetch("/api/settings/qq");
@@ -51,8 +72,16 @@ export function QqBridgeSection() {
         setAppId(s.bridge_qq_app_id);
         setAppSecret(s.bridge_qq_app_secret);
         setAllowedUsers(s.bridge_qq_allowed_users);
-        setImageEnabled(s.bridge_qq_image_enabled !== "false");
-        setMaxImageSize(s.bridge_qq_max_image_size || "20");
+        const img = s.bridge_qq_image_enabled !== "false";
+        const max = s.bridge_qq_max_image_size || "20";
+        setImageEnabled(img);
+        setMaxImageSize(max);
+        setSavedCredentials({
+          appId: s.bridge_qq_app_id,
+          appSecret: s.bridge_qq_app_secret,
+        });
+        setSavedAllowedUsers(s.bridge_qq_allowed_users);
+        setSavedImageSettings({ imageEnabled: img, maxImageSize: max });
       }
     } catch {
       // ignore
@@ -63,7 +92,9 @@ export function QqBridgeSection() {
     fetchSettings();
   }, [fetchSettings]);
 
-  const saveSettings = async (updates: Partial<QqBridgeSettings>) => {
+  const saveSettings = async (
+    updates: Partial<QqBridgeSettings>,
+  ): Promise<boolean> => {
     setSaving(true);
     try {
       const res = await fetch("/api/settings/qq", {
@@ -73,35 +104,54 @@ export function QqBridgeSection() {
       });
       if (res.ok) {
         setSettings((prev) => ({ ...prev, ...updates }));
+        return true;
       }
+      return false;
     } catch {
-      // ignore
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
-  const handleSaveCredentials = () => {
+  const handleSaveCredentials = async () => {
     const updates: Partial<QqBridgeSettings> = {
       bridge_qq_app_id: appId,
     };
-    if (appSecret && !appSecret.startsWith("***")) {
+    // Three-way secret handling: mask kept = omit / empty = explicit
+    // clear / real value = send. Empty case lets the user remove a
+    // saved secret via the UI, which the old `if (secret && ...)`
+    // gate silently dropped.
+    if (appSecret === "") {
+      updates.bridge_qq_app_secret = "";
+    } else if (!appSecret.startsWith("***")) {
       updates.bridge_qq_app_secret = appSecret;
     }
-    saveSettings(updates);
+    const ok = await saveSettings(updates);
+    if (ok) {
+      // Baseline from current form state, not updates: when the mask
+      // stayed untouched `updates.bridge_qq_app_secret` is undefined,
+      // and using that to rebuild the snapshot would silently drop
+      // the mask and leave the button stuck on "保存".
+      setSavedCredentials({ appId, appSecret });
+    }
   };
 
-  const handleSaveAllowedUsers = () => {
-    saveSettings({
-      bridge_qq_allowed_users: allowedUsers,
-    });
+  const handleSaveAllowedUsers = async () => {
+    const ok = await saveSettings({ bridge_qq_allowed_users: allowedUsers });
+    if (ok) {
+      setSavedAllowedUsers(allowedUsers);
+    }
   };
 
-  const handleSaveImageSettings = () => {
-    saveSettings({
+  const handleSaveImageSettings = async () => {
+    const ok = await saveSettings({
       bridge_qq_image_enabled: imageEnabled ? "true" : "false",
       bridge_qq_max_image_size: maxImageSize,
     });
+    if (ok) {
+      setSavedImageSettings({ imageEnabled, maxImageSize });
+    }
   };
 
   const handleVerify = async () => {
@@ -179,9 +229,11 @@ export function QqBridgeSection() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={handleSaveCredentials} disabled={saving}>
-            {saving ? t("common.loading") : t("common.save")}
-          </Button>
+          <SaveButton
+            dirty={credentialsDirty}
+            saving={saving}
+            onClick={handleSaveCredentials}
+          />
           <Button
             size="sm"
             variant="outline"
@@ -225,9 +277,11 @@ export function QqBridgeSection() {
           </p>
         </div>
 
-        <Button size="sm" onClick={handleSaveAllowedUsers} disabled={saving}>
-          {saving ? t("common.loading") : t("common.save")}
-        </Button>
+        <SaveButton
+          dirty={allowedUsersDirty}
+          saving={saving}
+          onClick={handleSaveAllowedUsers}
+        />
       </SettingsCard>
 
       {/* Image Settings */}
@@ -265,9 +319,11 @@ export function QqBridgeSection() {
           )}
         </div>
 
-        <Button size="sm" onClick={handleSaveImageSettings} disabled={saving}>
-          {saving ? t("common.loading") : t("common.save")}
-        </Button>
+        <SaveButton
+          dirty={imageSettingsDirty}
+          saving={saving}
+          onClick={handleSaveImageSettings}
+        />
       </SettingsCard>
 
       {/* Setup Guide */}

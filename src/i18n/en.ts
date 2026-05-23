@@ -628,6 +628,8 @@ const en = {
   'common.confirm': 'Confirm',
   'common.back': 'Back',
   'common.save': 'Save',
+  'common.saved': 'Saved',
+  'common.saving': 'Saving…',
   'common.delete': 'Delete',
   'common.loading': 'Loading...',
   'common.close': 'Close',
@@ -1936,11 +1938,11 @@ const en = {
   // Phase 2 Step 4c — composer runtime selector (between mode and permission).
   'runtimeSelector.triggerAria': 'Switch this session\'s execution runtime',
   'runtimeSelector.claudeCode': 'Claude Code',
-  'runtimeSelector.claudeCodeDesc': 'Routes through Claude Code SDK with full tools, plans, and permissions',
+  'runtimeSelector.claudeCodeDesc': 'Anthropic · full tools',
   'runtimeSelector.codepilotRuntime': 'CodePilot',
-  'runtimeSelector.codepilotRuntimeDesc': 'Built-in engine; works with any OpenAI-compatible provider',
+  'runtimeSelector.codepilotRuntimeDesc': 'OpenAI-compatible',
   'runtimeSelector.codexRuntime': 'Codex',
-  'runtimeSelector.codexRuntimeDesc': 'Routes through the local codex app-server; uses your Codex account models and native tools',
+  'runtimeSelector.codexRuntimeDesc': 'Codex account · native',
   'runtimeSelector.pinnedBadge': 'session-pinned',
   // Step 4c R6 — transcript marker when user flips RuntimeSelector mid-chat.
   'runtimeSwitchMarker.changedFromTo': 'Switched runtime: {from} → {to}',

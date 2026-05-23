@@ -1230,11 +1230,11 @@ export function ModelsSection() {
   }, [deleteTarget]);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-8">
       <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-medium">{isZh ? '模型管理' : 'Model management'}</h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <h2 className="text-xl font-semibold tracking-tight">{isZh ? '模型管理' : 'Model management'}</h2>
+          <p className="text-sm text-muted-foreground mt-1.5">
             {isZh
               ? '选择每个服务商要在聊天里出现的模型，并补充自定义显示名。'
               : 'Choose which models each provider exposes in chat, with optional display-name overrides.'}
@@ -2080,6 +2080,7 @@ export function ModelsSection() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddDialog(null)}>{t('common.cancel')}</Button>
             <Button onClick={handleAddModel} disabled={!newModelId.trim()}>
+              <CodePilotIcon name="plus" size="sm" aria-hidden />
               {isZh ? '添加' : 'Add'}
             </Button>
           </DialogFooter>

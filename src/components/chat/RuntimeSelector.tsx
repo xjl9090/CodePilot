@@ -10,7 +10,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
-import { CaretDown, CheckCircle } from '@/components/ui/icon';
+import { CaretDown } from '@/components/ui/icon';
 import Anthropic from '@lobehub/icons/es/Anthropic';
 import OpenAI from '@lobehub/icons/es/OpenAI';
 import { MonolithIcon } from '@/components/brand/MonolithIcon';
@@ -133,14 +133,15 @@ export function RuntimeSelector({
             className="items-start py-2"
           >
             <RuntimeIcon runtime={id} size={14} className="mt-0.5" />
-            <div className="flex flex-col items-start gap-0.5 flex-1">
-              <span className="flex items-center gap-1.5">
-                {t(RUNTIME_LABEL_KEYS[id].label)}
-                {activeRuntime === id && (
-                  <CheckCircle size={12} className="text-status-success-foreground" />
-                )}
-              </span>
-              <span className="text-[11px] text-muted-foreground leading-tight">
+            <div className="flex flex-col items-start gap-0.5 flex-1 min-w-0">
+              <span>{t(RUNTIME_LABEL_KEYS[id].label)}</span>
+              {/* Round 16: trimmed to one line. The description was
+                  wrapping over 2-3 lines in zh and made the runtime
+                  picker feel like a settings page. Active-state
+                  checkmark removed — DropdownMenuItem already shows
+                  the active row via its own bg highlight, the
+                  redundant ✓ added visual noise. */}
+              <span className="text-[11px] text-muted-foreground leading-tight line-clamp-1 max-w-[200px]">
                 {t(RUNTIME_LABEL_KEYS[id].desc)}
               </span>
             </div>

@@ -1,6 +1,6 @@
 # Refactor Closeout / 重构收口计划（总控板）
 
-> 创建：2026-05-06 · 最后更新：2026-05-20（Phase 0-6 已完成并归档；Phase 6 上下文可视化 / context-accounting 已收口；下一步进入 Phase 7 视觉锚点与图标体系）
+> 创建：2026-05-06 · 最后更新：2026-05-21（Phase 0-6 已完成并归档；Phase 6 上下文可视化 / context-accounting 已收口；下一步进入 Phase 7 视觉锚点与图标体系；Phase 8 Codex MCP / Memory 注入已登记为 Phase 7 后续）
 > 这是日常入口；查历史细节请走"历史归档"列（`completed/refactor-phase-*.md` + `completed/phase-4-markdown-artifact.md`），不要在本文件里翻 1000 行决策日志。
 > **协作边界**：Codex 负责计划制定、方案审查和 Review；ClaudeCode 负责执行代码改动、测试和提交整理。除非用户明确重新授权，Codex 只能改 `docs/` 下的计划 / 交接 / review 文档，不再直接改业务代码。
 > **上下文同步纪律**：交给 ClaudeCode 的内容不能只给"最终结论"或任务清单，必须同时写清楚讨论过程、判断依据、被否掉的方案和为什么否掉。尤其是架构 / Runtime / 权限 / provider / 安全边界相关任务，Codex 的交接文案需要包含：用户原始诉求 → 中间争议 → 取舍理由 → 当前决定 → 不做边界 → 审查重点。这样 ClaudeCode 重启或上下文较短时，也能继承判断过程，而不是重新踩同一个坑。
@@ -19,6 +19,7 @@
 | 5c | CodePilot Tool Bridge for Codex | Codex Runtime 下，CodePilot 自有 Memory / Tasks / Widget / Image / Media 等能被感知、调用并回到 UI；Dashboard / CLI / assistant_buddy 在 Codex 下诚实降级 | ✅ 实现 + Harness 收口完成；Codex 不支持项在 Settings 与聊天工具结果下方用用户语言提示 | [phase-5](../completed/phase-5-codex-runtime.md) · [phase-5c](../completed/phase-5c-codex-tool-bridge.md) · [phase-5e](../completed/phase-5e-runtime-harness-architecture.md) |
 | 6 | 上下文可视化 | 输入框右下角是组成条而不是单一百分比；popover 展示来源分解与三 Runtime context-accounting | ✅ 已完成并归档（2026-05-20） | [phase-6](../completed/phase-6-context-visualization.md) · [context-accounting](../completed/context-accounting-runtime-contract.md) |
 | 7 | 视觉锚点与图标体系 | 先收敛图标库与图标表意，再扩展点阵风格视觉记忆点 | 📋 待开始 | [phase-7-icons](./phase-7-icon-system.md) |
+| 8 | Codex MCP / Memory 注入 | 在 Codex Runtime 下通过 `config.mcp_servers` 验证并注入 CodePilot Memory MCP / 用户 MCP；不可行路径在 Settings 诚实降级 | 📋 已登记；待 Phase 7 完成后启动 | [phase-8-codex-mcp](./phase-8-codex-mcp-context-injection.md) |
 
 ## 下一步
 
@@ -27,6 +28,7 @@
 **后续不是 Phase 5 阻塞项**：
 
 - `@openai/codex-sdk` execution POC 仍可作为后续研究：control plane 继续保留 app-server，execution plane 是否切 SDK 需要单独 POC。
+- Codex MCP / Memory 注入已登记为 [Phase 8](./phase-8-codex-mcp-context-injection.md)：当前判断是 Codex app-server 支持 `config.mcp_servers`，CodePilot 缺的是 Memory MCP wrapper 与 start/resume 注入链路；等 Phase 7 UI/icon 优化收口后按 POC → 产品化推进。
 - Dashboard / CLI 等在 Codex 下不可执行的能力已通过 Settings 能力清单和聊天工具提示诚实降级；后续若要变成可执行能力，按 Harness Capability Contract 新开 slice。
 - Phase 7 才是下一条主线：视觉锚点与图标体系。第一刀先做 [图标体系与表意校准](./phase-7-icon-system.md)：HugeIcons 主库迁移、CodePilot semantic icon layer、重复图标 / 表意不清收敛；点阵 loading / 空状态 / 背景纹理等视觉资产排在图标语义稳定之后。
 

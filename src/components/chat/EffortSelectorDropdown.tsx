@@ -69,10 +69,13 @@ export function EffortSelectorDropdown({
                     onEffortChange(level);
                     setEffortMenuOpen(false);
                   }}
-                  className="justify-between"
                 >
+                  {/* Round 16: removed trailing `&#10003;` checkmark.
+                      `active` prop styles the row already; the
+                      duplicate glyph was redundant and pushed the row
+                      to `justify-between`, misaligned with the other
+                      composer dropdowns. */}
                   <span className="text-xs">{t(`messageInput.effort.${level}` as TranslationKey)}</span>
-                  {selectedEffort === level && <span className="text-xs">&#10003;</span>}
                 </CommandListItem>
               ))}
             </div>

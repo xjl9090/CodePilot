@@ -664,7 +664,11 @@ export function ProviderManager() {
   // writes happen via the Models page status row + per-row pin button.
 
   return (
-    <div className="max-w-4xl mx-auto space-y-10">
+    <div className="max-w-4xl mx-auto space-y-8">
+      {/* Page title — matches other Settings sub-pages. */}
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">{t('settings.providers')}</h2>
+      </div>
       {/* Error */}
       {error && (
         <div className="rounded-md bg-destructive/10 p-3">
@@ -915,7 +919,7 @@ export function ProviderManager() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-medium">{t('provider.connectedServices')}</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
+                <p className="text-sm text-muted-foreground mt-1.5">
                   {t('provider.addServiceDesc')}
                 </p>
               </div>

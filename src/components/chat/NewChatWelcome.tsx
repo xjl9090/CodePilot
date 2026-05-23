@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { MonolithIcon } from '@/components/brand/MonolithIcon';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
@@ -14,16 +14,21 @@ import type { TranslationKey } from '@/i18n';
  *
  *     [Monolith logo] [Random welcome message in large text]
  *
- * Logo + text live on ONE row, vertically aligned with each other.
- * Logo height tracks the text's cap height so the two read as a
- * single composed wordmark, not as a stack. The parent
- * (`/chat/page.tsx`) is responsible for vertically centering this
- * row + composer + cards as one block against the viewport.
+ * The welcome line rotates across 6 short prompts, but the
+ * randomisation runs client-side only (useEffect after mount). An
+ * earlier version used `useMemo(() => Math.random(), [])` which
+ * picks on every render — including the server pass and the first
+ * client hydration pass — and ran Math.random twice with different
+ * results, producing a hydration mismatch:
  *
- * The welcome line rotates across 6 short prompts. We pick a stable
- * index for the lifetime of the component (via useMemo with no deps)
- * so the message doesn't flicker on re-render but DOES change every
- * time the user opens /chat fresh (new mount → new random pick).
+ *   client: "How can I assist you?"
+ *   server: "What would you like to build?"
+ *
+ * Hydration warnings break Phase 7b vibrancy smoke (Codex round 3
+ * review): they leave a noisy DevTools console that masks the real
+ * UI issues we're trying to chase. Initial state is the first
+ * welcome key so server and client render the SAME string; once
+ * useEffect runs we swap in the random pick.
  */
 
 const WELCOME_KEYS: ReadonlyArray<TranslationKey> = [
@@ -37,10 +42,10 @@ const WELCOME_KEYS: ReadonlyArray<TranslationKey> = [
 
 export function NewChatWelcome() {
   const { t } = useTranslation();
-  const welcomeKey = useMemo(
-    () => WELCOME_KEYS[Math.floor(Math.random() * WELCOME_KEYS.length)],
-    [],
-  );
+  const [welcomeKey, setWelcomeKey] = useState<TranslationKey>(WELCOME_KEYS[0]);
+  useEffect(() => {
+    setWelcomeKey(WELCOME_KEYS[Math.floor(Math.random() * WELCOME_KEYS.length)]);
+  }, []);
 
   return (
     <div className="flex items-center justify-center gap-3 mb-8">

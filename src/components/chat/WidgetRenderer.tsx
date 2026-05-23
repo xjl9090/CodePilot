@@ -239,7 +239,7 @@ function WidgetRendererInner({ widgetCode, isStreaming, title, showOverlay, extr
     // reads as texture, not noise. 14px grid for density without
     // becoming busy.
     <div
-      className="group/widget relative my-1 rounded-xl p-4 bg-muted/40"
+      className="group/widget relative my-1 rounded-xl p-4 bg-muted/20"
       style={{
         // Project theme uses oklch() not HSL — `hsl(var(--muted-foreground) / 0.12)`
         // would produce an invalid color and the browser silently drops
@@ -290,16 +290,22 @@ function WidgetRendererInner({ widgetCode, isStreaming, title, showOverlay, extr
         </pre>
       )}
 
-      {/* Toolbar — top-right, visible on hover. inset offset adjusted
-          for parent p-4 padding so the toolbar still hugs the card
-          edge instead of floating outside. */}
-      <div className="absolute top-2 right-2 opacity-0 group-hover/widget:opacity-100 transition-opacity flex items-center gap-1">
+      {/* Toolbar — top-right, **always visible** (round 12 design
+          refresh). Previously `opacity-0 group-hover/widget:opacity-100`
+          hid the actions until the cursor entered the card, which
+          made them feel like a hidden affordance. They're now
+          permanent at full opacity.
+          Button geometry bumped from `text-[10px] px-1.5 py-0.5` to
+          `text-xs h-7 px-2 gap-1` to match the size the Markdown table
+          / code block action buttons will share — readable hit target
+          without overwhelming the card. */}
+      <div className="absolute top-2 right-2 flex items-center gap-1">
         {extraButtons}
         <button
           onClick={() => setShowCode(!showCode)}
-          className="text-[10px] px-1.5 py-0.5 rounded text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50 flex items-center gap-0.5"
+          className="h-7 px-2 gap-1 inline-flex items-center justify-center rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
-          <CodePilotIcon name="code" size={12} aria-hidden />
+          <CodePilotIcon name="code" size="sm" aria-hidden />
           {showCode ? t('widget.hideCode') : t('widget.showCode')}
         </button>
       </div>

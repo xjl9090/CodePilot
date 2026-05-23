@@ -6,6 +6,7 @@ import {
   DotOutline,
   DotsThree,
   Columns,
+  ArrowLeft,
 } from "@/components/ui/icon";
 import { CodePilotIcon } from "@/components/ui/semantic-icon";
 import { Button } from "@/components/ui/button";
@@ -133,26 +134,60 @@ export function UnifiedTopBar() {
   // a hydration mismatch warning.
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
-  const reopenSidebarButton = mounted && !chatListOpen ? (
+  // Round 20 — single sidebar toggle button (open AND close). Used
+  // to be a "reopen only" button that lived in the topbar; the
+  // matching collapse button lived inside ChatListPanel. Round 20
+  // moves all topbar chrome — traffic-light safe area, sidebar
+  // toggle — into the UnifiedTopBar so the four floating cards
+  // (sidebar, main, workspace, file tree) all share the same
+  // y-origin underneath the topbar.
+  const sidebarToggleButton = mounted ? (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
-          onClick={() => setChatListOpen(true)}
-          aria-label={t('chatList.expandSidebar' as TranslationKey)}
-          className="text-muted-foreground hover:text-foreground"
+          onClick={() => setChatListOpen(!chatListOpen)}
+          aria-label={t((chatListOpen ? 'chatList.collapseSidebar' : 'chatList.expandSidebar') as TranslationKey)}
+          // ml + translateY route through platform tokens: 0/0 on
+          // web/win32/linux (no shift), 78px/2px on macOS so the button
+          // (a) clears the traffic-light cluster horizontally and
+          // (b) lines up vertically with the traffic-light center.
+          className="text-muted-foreground hover:text-foreground ml-[var(--platform-traffic-light-safe-area)] translate-y-[var(--platform-traffic-light-offset-y)]"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
-          <CodePilotIcon name="panel_left_open" size="md" className="text-inherit" aria-hidden />
+          <CodePilotIcon
+            name={chatListOpen ? 'panel_left_close' : 'panel_left_open'}
+            size="md"
+            className="text-inherit"
+            aria-hidden
+          />
         </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">
-        {t('chatList.expandSidebar' as TranslationKey)}
+        {t((chatListOpen ? 'chatList.collapseSidebar' : 'chatList.expandSidebar') as TranslationKey)}
       </TooltipContent>
     </Tooltip>
   ) : null;
+
+  // Round 33 — settings routes get an inline Back button in the
+  // topbar (Codex feedback: "既然顶上有 Tab 条了, 返回可以放上面").
+  // Mirrors the logic that used to live in `SettingsSidebar`: prefer
+  // the recorded last-non-settings path, fall back to /chat. Wrapped
+  // in `WebkitAppRegion: 'no-drag'` so it stays clickable inside the
+  // draggable topbar.
+  const isSettingsRoute = pathname.startsWith('/settings');
+  const handleSettingsBack = useCallback(() => {
+    if (typeof window !== "undefined") {
+      const last = sessionStorage.getItem("codepilot:last-non-settings-path");
+      if (last && !last.startsWith("/settings")) {
+        router.push(last);
+        return;
+      }
+    }
+    router.push("/chat");
+  }, [router]);
 
   // On non-chat routes the bar is otherwise just a thin drag region.
   // We still need the reopen button visible there so the user has a
@@ -160,10 +195,23 @@ export function UnifiedTopBar() {
   if (!isChatRoute) {
     return (
       <div
-        className="flex h-8 shrink-0 items-center pl-3"
+        className="flex h-10 shrink-0 items-center gap-2 pl-3 bg-[var(--platform-surface-bar)]"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
-        {reopenSidebarButton}
+        {sidebarToggleButton}
+        {isSettingsRoute && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleSettingsBack}
+            className="h-7 px-2 gap-1 text-xs font-normal text-muted-foreground hover:text-foreground"
+            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+          >
+            <ArrowLeft size={14} />
+            {t("common.back" as TranslationKey)}
+          </Button>
+        )}
       </div>
     );
   }
@@ -173,13 +221,17 @@ export function UnifiedTopBar() {
   return (
     <>
       <div
-        className="flex h-12 shrink-0 items-center gap-3 bg-background px-4"
+        // bg routed through the platform token (Phase 7b / Phase 2).
+        // Default = `var(--background)` so non-macOS visuals are
+        // identical to the prior `bg-background`. macOS profile drops
+        // alpha so Electron's window vibrancy shows through the bar.
+        className="flex h-10 shrink-0 items-center gap-3 bg-[var(--platform-surface-bar)] px-4"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
         {/* Reopen-sidebar toggle, only present when the user collapsed
             the left nav. Pairs with the collapse button inside
             ChatListPanel; null otherwise so it doesn't take up space. */}
-        {reopenSidebarButton}
+        {sidebarToggleButton}
         {/* Left: chat title → workspace name (muted) → per-session "..."
             menu. The "..." mirrors the chat list's row menu so users can
             rename / split / copy id / delete the active conversation

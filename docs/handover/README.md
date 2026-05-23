@@ -15,6 +15,7 @@
 | cli-tools.md | CLI 工具管理：静态 catalog、系统检测、一键安装、AI 描述、聊天上下文注入、输入框选择器 |
 | ui-governance.md | 设计模式治理：四层架构、ESLint 规则、图标/颜色统一、组件拆分记录、新增文件清单（**图标部分在 Phase 7 收口后由 icon-system.md 接管**） |
 | icon-system.md | **Phase 7 图标体系**（Phase 0 reference）：Semantic alias 字典（model/runtime/skill/mcp/cli/terminal/memory/...）、HugeIcons free 候选映射、Brain/Lightning/Terminal 三大冲突解决决议、7 优先迁移区域 inventory snapshot、Phase 2 wave plan |
+| macos-visual-profile.md | **Phase 7b macOS Native Visual Profile**：Raycast v2 + Apple Liquid Glass/HIG 调研结论、Electron vibrancy 窗口级边界、12 个 shell/floating/content surface 审计矩阵、light/dark baseline 截图清单、Phase 1/2 平台 token 与 material POC 建议 |
 | git-terminal-layout.md | Git 集成 + 终端 + 统一布局重构：四层布局、Git 后端/前端、终端抽屉、ResizeHandle 统一、已知债务 |
 | onboarding-setup-center.md | 首次引导 Setup Center：三卡片引导流程、Claude Code 环境检测与冲突处理、Provider 三条凭据来源、目录校验回退链、Toast 系统、Windows 适配 |
 | generative-ui.md | 生成式 UI Widget 系统：代码围栏触发、receiver iframe 渲染、CSS 变量桥接、流式预览、高度缓存、安全模型、UX 优化清单 |

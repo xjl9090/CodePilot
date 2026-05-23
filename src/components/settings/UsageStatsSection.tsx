@@ -238,7 +238,11 @@ export function UsageStatsSection() {
     : undefined;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-8">
+      {/* Page title — matches other Settings sub-pages. */}
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">{t('settings.usage')}</h2>
+      </div>
       {/* Day range selector */}
       <div className="flex items-center gap-2">
         {RANGE_OPTIONS.map((opt) => (

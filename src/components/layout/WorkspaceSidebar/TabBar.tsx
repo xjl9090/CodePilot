@@ -130,7 +130,9 @@ export function TabBar({ className }: TabBarProps) {
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center bg-background px-2 pt-1.5 pb-3',
+        // Right rail is opaque again (round 5) — TabBar inherits the
+        // parent's bg-background by going transparent itself.
+        'flex shrink-0 items-center bg-transparent px-2 pt-1.5 pb-3',
         className,
       )}
     >

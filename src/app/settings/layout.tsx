@@ -74,12 +74,16 @@ export default function SettingsRouteLayout({
         })}
       </nav>
 
-      {/* Content slot — children come from the active /settings/<section>/page.tsx */}
+      {/* Content slot — children come from the active /settings/<section>/page.tsx.
+          Round 12 (2026-05-23): padding bumped from p-4/lg:p-6 to
+          p-6/lg:p-10 — the previous values left the page title sitting
+          almost flush with the topbar, which user feedback flagged as
+          cramped. */}
       <div className="flex min-h-0 flex-1">
         <div
           className={cn(
             "flex-1 overflow-auto",
-            isBridge ? "" : "p-4 lg:p-6",
+            isBridge ? "" : "p-6 lg:p-10",
           )}
         >
           {children}

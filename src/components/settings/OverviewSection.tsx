@@ -33,7 +33,6 @@ import { CodePilotIcon } from "@/components/ui/semantic-icon";
 import {
   Plug,
   UserCircle,
-  Heart,
   CheckCircle,
   Warning,
   ArrowsClockwise,
@@ -135,10 +134,10 @@ export function OverviewSection() {
 
   if (state.loading) {
     return (
-      <div className="max-w-5xl mx-auto space-y-6">
+      <div className="max-w-4xl mx-auto space-y-8">
         <div>
-          <h2 className="text-sm font-medium">{t("settings.overview" as TranslationKey)}</h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <h2 className="text-xl font-semibold tracking-tight">{t("settings.overview" as TranslationKey)}</h2>
+          <p className="text-sm text-muted-foreground mt-1.5">
             {t("settings.overviewDesc" as TranslationKey)}
           </p>
         </div>
@@ -150,10 +149,10 @@ export function OverviewSection() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-8">
       <div>
-        <h2 className="text-sm font-medium">{t("settings.overview" as TranslationKey)}</h2>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
+        <h2 className="text-xl font-semibold tracking-tight">{t("settings.overview" as TranslationKey)}</h2>
+        <p className="text-sm text-muted-foreground mt-1.5">
           {t("settings.overviewDesc" as TranslationKey)}
         </p>
       </div>
@@ -353,7 +352,15 @@ export function OverviewSection() {
             from Overview, so the Overview index has one consistent
             answer for "where do I check status?". */}
         <OverviewCard
-          icon={<Heart size={16} weight={claudeWarnings ? "regular" : "fill"} />}
+          // Swapped from Phosphor `<Heart weight="fill">` to the
+          // CodePilotIcon `health` glyph (HugeIcons HeartCheck —
+          // stroked). The other Overview cards already use stroked
+          // CodePilotIcon glyphs (runtime / model / provider); the
+          // filled Phosphor heart visually broke the row. The
+          // health-vs-warning state is already conveyed by `tone` +
+          // the warning copy below the card, so we don't need the
+          // icon weight to carry that signal too.
+          icon={<CodePilotIcon name="health" size="md" />}
           title={isZh ? "健康检查" : "Health"}
           tone={claudeWarnings ? "warning" : "muted"}
           primaryActionLabel={isZh ? "去健康检查" : "Open Health"}

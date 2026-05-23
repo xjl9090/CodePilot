@@ -38,9 +38,17 @@ export function PanelZone() {
   if (!anyOpen) return null;
 
   return (
-    <div className="flex h-full shrink-0 border-l border-border/40 overflow-hidden">
+    // Round 32 — file tree wrapped in card-frame for macOS profile so
+    // its outer shadow doesn't get clipped by the surface's clip-path.
+    // overflow:visible on the outer flex so the frame's shadow can
+    // paint past its boundary.
+    <div className="flex h-full shrink-0">
       {assistantPanelOpen && <AssistantPanel />}
-      {fileTreeOpen && <FileTreePanel />}
+      {fileTreeOpen && (
+        <div data-platform-card-frame="file-tree" className="h-full">
+          <FileTreePanel />
+        </div>
+      )}
     </div>
   );
 }

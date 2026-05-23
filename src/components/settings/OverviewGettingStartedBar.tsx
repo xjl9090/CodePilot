@@ -79,7 +79,7 @@ export function OverviewGettingStartedBar({
                 {item.label}
               </p>
               {!item.done && (
-                <p className="text-[11px] text-muted-foreground mt-0.5">
+                <p className="text-sm text-muted-foreground mt-1.5">
                   {item.desc}
                 </p>
               )}

@@ -940,7 +940,62 @@ function createWindow(url?: string) {
 
   if (process.platform === 'darwin') {
     windowOptions.titleBarStyle = 'hiddenInset';
-    windowOptions.vibrancy = 'sidebar';
+    // Round 28 — shell padding 16, topbar h-10 → items center y=36.
+    // Dot cluster center = y+7, so trafficLightPosition.y = 36-7 = 29.
+    windowOptions.trafficLightPosition = { x: 20, y: 29 };
+    // macOS material POC matrix — Codex round 3 (2026-05-23).
+    // Reviewer asked for a real matrix, not single-flag guessing.
+    // Env-driven so anyone can rerun a candidate without editing src:
+    //
+    //   ELECTRON_VIBRANCY=menu|sidebar|under-window|content|fullscreen-ui|off
+    //   ELECTRON_TRANSPARENT=true|false                   (default: true)
+    //
+    // Defaults reflect what we know so far:
+    //   - `'menu'` is what /Applications/Codex.app actually uses
+    //     as its primary window material (verified in app.asar).
+    //   - `transparent: true` makes Electron honor an alpha-0
+    //     backgroundColor on macOS — required for `vibrancy` to
+    //     surface unless we go the davidcann route of native
+    //     NSVisualEffectView injection.
+    //
+    // `off` is the explicit no-vibrancy variant so the matrix can
+    // include an opaque baseline. Electron's setter accepts `null`
+    // to clear vibrancy.
+    const VIBRANCY_CANDIDATES = new Set([
+      'menu', 'sidebar', 'under-window', 'content', 'fullscreen-ui',
+      'titlebar', 'selection', 'popover', 'header', 'sheet', 'window',
+      'hud', 'tooltip', 'under-page',
+    ]);
+    const envVibrancy = process.env.ELECTRON_VIBRANCY;
+    const vibrancyChoice = envVibrancy && (VIBRANCY_CANDIDATES.has(envVibrancy) || envVibrancy === 'off')
+      ? envVibrancy
+      : 'menu';
+    const envTransparent = process.env.ELECTRON_TRANSPARENT;
+    const transparentChoice = envTransparent === 'false' ? false : true;
+
+    if (vibrancyChoice !== 'off') {
+      windowOptions.vibrancy = vibrancyChoice as Electron.BrowserWindowConstructorOptions['vibrancy'];
+    }
+    // CRITICAL: use `#00ffffff` not `#00000000`. Electron's macOS
+    // color parser has a long-standing bug where rgb=0 alpha=0 is
+    // treated as opaque white (issue #20357). `#00ffffff` (white
+    // rgb, alpha=0) is the documented workaround that actually
+    // produces a transparent backing layer.
+    windowOptions.backgroundColor = '#00ffffff';
+    windowOptions.transparent = transparentChoice;
+    windowOptions.visualEffectState = 'followWindow';
+
+    console.log('[macos-vibrancy-poc] window options:', {
+      vibrancy: vibrancyChoice,
+      transparent: transparentChoice,
+      // Mirror the actual value set above. Previously hardcoded as
+      // '#00000000' which misleadingly suggested we'd hit Electron's
+      // parser bug; the real value is '#00ffffff' (the documented
+      // workaround for issue #20357).
+      backgroundColor: windowOptions.backgroundColor,
+      titleBarStyle: 'hiddenInset',
+      hint: 'override via ELECTRON_VIBRANCY / ELECTRON_TRANSPARENT env vars',
+    });
   } else if (process.platform === 'win32') {
     windowOptions.titleBarStyle = 'hidden';
     windowOptions.titleBarOverlay = {
@@ -971,8 +1026,128 @@ function createWindow(url?: string) {
 
   mainWindow.loadURL(url || LOADING_HTML);
 
+  // Codex round 3 + Electron issue #20357 fix — re-apply
+  // setBackgroundColor / setVibrancy AFTER loadURL. loadURL resets
+  // the chromium compositor's backing colour to opaque (this is
+  // why "constructor option only" repros white window after every
+  // navigation). Re-calling here on macOS reattaches the
+  // NSVisualEffectView. We mirror Codex.app's belt-and-braces
+  // pattern (constructor options + runtime setters).
+  if (process.platform === 'darwin') {
+    try {
+      mainWindow.setBackgroundColor('#00ffffff');
+      const v = windowOptions.vibrancy;
+      if (v) {
+        mainWindow.setVibrancy(v);
+      } else {
+        mainWindow.setVibrancy(null);
+      }
+    } catch (err) {
+      console.warn('[macos-vibrancy-poc] runtime setBackgroundColor/setVibrancy failed:', err);
+    }
+  }
+
   if (isDev) {
-    mainWindow.webContents.openDevTools();
+    // CRITICAL: docked DevTools force the window to render with an
+    // opaque white background regardless of transparent/vibrancy
+    // settings (Electron issue #20357 comment). Always open in a
+    // detached panel so the main window can still surface vibrancy.
+    mainWindow.webContents.openDevTools({ mode: 'undocked' });
+
+    // macOS material POC diagnostic — Phase 7b Phase 2 round 3.
+    // Print platform / token / surface state to the MAIN process
+    // console (visible in the same terminal that ran electron:dev)
+    // 1.5 s after the renderer finishes loading. Keeps the loop
+    // tight: change a vibrancy or CSS value, restart Electron,
+    // read the diagnostic line, no DevTools needed.
+    //
+    // Logged keys:
+    //   - dataPlatform / dataPlatformStyle: <html> attrs from
+    //     anti-FOUC inline script — proves the cascade can see them
+    //   - electronApiPlatform: process.platform forwarded through
+    //     preload contextBridge — proves the bridge works
+    //   - bodyBg / chatListBg / topbarBg: computed background-color
+    //     on each candidate chrome surface — should read 'rgba(0,0,0,0)'
+    //     on macOS profile when vibrancy is meant to surface
+    //   - surfaceSidebarToken / surfaceBarToken: resolved CSS var
+    //     values on the root — should be `transparent` under the
+    //     darwin profile, `color-mix(...)` elsewhere
+    //   - vibrancyOption / transparentOption / backgroundColorOption:
+    //     the actual NSWindow-side options we set above
+    if (process.platform === 'darwin') {
+      mainWindow.webContents.on('did-finish-load', () => {
+        // 4 s — give Next dev time to mount lazy ChatListPanel /
+        // WorkspaceSidebar / topbar tree. The walker below is
+        // expensive on the renderer for a single fire; we don't run
+        // it on a timer.
+        setTimeout(() => {
+          mainWindow?.webContents
+            .executeJavaScript(`(() => {
+              const html = document.documentElement;
+              const cs = getComputedStyle(html);
+              // Walk every visible element, list the ones with an
+              // opaque background. ANY opaque ancestor inside
+              // <body> covers the NSVisualEffectView. The earlier
+              // diag only checked five named surfaces — that's not
+              // enough; if even one wrapper (#__next, an error
+              // boundary, a portal root, ThemeProvider div) is
+              // opaque, vibrancy never surfaces.
+              const opaqueOffenders = [];
+              const all = document.querySelectorAll('*');
+              for (const el of all) {
+                const s = getComputedStyle(el);
+                const bg = s.backgroundColor;
+                if (!bg || bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent') continue;
+                // Treat anything with non-zero alpha as opaque enough
+                // to block the material underneath.
+                const m = bg.match(/rgba?\\(([^)]+)\\)/);
+                if (!m) continue;
+                const parts = m[1].split(',').map((p) => parseFloat(p.trim()));
+                const alpha = parts.length === 4 ? parts[3] : 1;
+                if (alpha < 0.05) continue;
+                const rect = el.getBoundingClientRect();
+                if (rect.width < 10 || rect.height < 10) continue;
+                opaqueOffenders.push({
+                  tag: el.tagName.toLowerCase(),
+                  // Truncate so the log stays readable
+                  cls: (el.className?.toString() || '').slice(0, 120),
+                  id: el.id || null,
+                  bg,
+                  w: Math.round(rect.width),
+                  h: Math.round(rect.height),
+                });
+              }
+              // Cap to top 30 by area so we don't flood the log
+              opaqueOffenders.sort((a, b) => (b.w * b.h) - (a.w * a.h));
+              return {
+                dataPlatform: html.getAttribute('data-platform'),
+                dataShell: html.getAttribute('data-shell'),
+                dataPlatformStyle: html.getAttribute('data-platform-style'),
+                electronApiPlatform: window.electronAPI?.versions?.platform ?? null,
+                htmlBg: cs.backgroundColor,
+                bodyBg: getComputedStyle(document.body).backgroundColor,
+                surfaceSidebarToken: cs.getPropertyValue('--platform-surface-sidebar').trim(),
+                surfaceBarToken: cs.getPropertyValue('--platform-surface-bar').trim(),
+                opaqueElementCount: opaqueOffenders.length,
+                top30OpaqueOffenders: opaqueOffenders.slice(0, 30),
+              };
+            })()`)
+            .then((r) => {
+              console.log('[macos-vibrancy-diag] renderer state:', JSON.stringify(r, null, 2));
+              console.log('[macos-vibrancy-diag] window options:', JSON.stringify({
+                vibrancyOption: windowOptions.vibrancy,
+                transparentOption: windowOptions.transparent,
+                backgroundColorOption: windowOptions.backgroundColor,
+                visualEffectStateOption: windowOptions.visualEffectState,
+                titleBarStyle: windowOptions.titleBarStyle,
+              }, null, 2));
+            })
+            .catch((err) => {
+              console.warn('[macos-vibrancy-diag] failed:', err?.message ?? err);
+            });
+        }, 4000);
+      });
+    }
   }
 
   // Menubar-resident behavior: clicking close hides the window instead of

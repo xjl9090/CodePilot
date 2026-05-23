@@ -200,7 +200,15 @@ export function ModelSelectorDropdown({
       </PromptInputButton>
 
       {modelMenuOpen && (
-        <CommandList className="w-80 mb-1.5">
+        // Round 12: mount-time animation matches shadcn Select /
+        // Radix Popover (`data-[state=open]:animate-in fade-in-0
+        // zoom-in-95 slide-in-from-top-2`). The dropdown is custom
+        // (built around a controlled `modelMenuOpen` + click-outside,
+        // not Radix), so we apply the animate-in directly via
+        // tailwindcss-animate utilities on mount. Without these the
+        // popover used to pop in instantly while every other dropdown
+        // in the app animated — visually inconsistent.
+        <CommandList className="w-80 mb-1.5 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-150">
           {/* Phase 6 UI收口 P2 (2026-05-14) — header disclosures removed.
               The previous "only showing models for X" / "Codex currently
               supports only ..." banners explained a server-side filter

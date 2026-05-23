@@ -615,6 +615,8 @@ const zh: Record<TranslationKey, string> = {
   'common.confirm': '确定',
   'common.back': '返回',
   'common.save': '保存',
+  'common.saved': '已保存',
+  'common.saving': '保存中…',
   'common.delete': '删除',
   'common.loading': '加载中...',
   'common.close': '关闭',
@@ -1912,11 +1914,11 @@ const zh: Record<TranslationKey, string> = {
   // Phase 2 Step 4c — composer runtime selector (between mode and permission).
   'runtimeSelector.triggerAria': '切换本会话执行引擎',
   'runtimeSelector.claudeCode': 'Claude Code',
-  'runtimeSelector.claudeCodeDesc': '走 Claude Code SDK，工具、计划、权限完整',
+  'runtimeSelector.claudeCodeDesc': 'Anthropic 官方 · 完整工具',
   'runtimeSelector.codepilotRuntime': 'CodePilot',
-  'runtimeSelector.codepilotRuntimeDesc': 'CodePilot 内置引擎，支持任意 OpenAI 兼容服务商',
+  'runtimeSelector.codepilotRuntimeDesc': '兼容 OpenAI 服务商',
   'runtimeSelector.codexRuntime': 'Codex',
-  'runtimeSelector.codexRuntimeDesc': '走本机 codex app-server，使用 Codex 账号原生模型与工具',
+  'runtimeSelector.codexRuntimeDesc': 'Codex 账号 · 原生模型',
   'runtimeSelector.pinnedBadge': '本会话已切换',
   // Step 4c R6 — transcript marker when user flips RuntimeSelector mid-chat.
   'runtimeSwitchMarker.changedFromTo': '已切换执行引擎：{from} → {to}',

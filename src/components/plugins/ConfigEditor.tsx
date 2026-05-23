@@ -4,16 +4,17 @@ import { useState, useEffect } from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { useTranslation } from '@/hooks/useTranslation';
+import { SaveButton } from '@/components/ui/save-button';
 
 interface ConfigEditorProps {
   value: string;
   onSave: (value: string) => void;
   label?: string;
+  /** Set to true by the parent while the save request is in flight. */
+  saving?: boolean;
 }
 
-export function ConfigEditor({ value, onSave, label }: ConfigEditorProps) {
-  const { t } = useTranslation();
+export function ConfigEditor({ value, onSave, label, saving = false }: ConfigEditorProps) {
   const [text, setText] = useState(value);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,6 +40,11 @@ export function ConfigEditor({ value, onSave, label }: ConfigEditorProps) {
     }
   }
 
+  // Dirty when the user has typed but not yet saved. Invalid JSON
+  // (error !== null) keeps the button enabled — clicking re-validates
+  // and surfaces the parse error in the inline message.
+  const dirty = text !== value;
+
   return (
     <div className="space-y-2">
       {label && <Label>{label}</Label>}
@@ -53,9 +59,7 @@ export function ConfigEditor({ value, onSave, label }: ConfigEditorProps) {
       />
       {error && <p className="text-xs text-destructive">{error}</p>}
       <div className="flex gap-2">
-        <Button size="sm" onClick={handleSave}>
-          {t('common.save')}
-        </Button>
+        <SaveButton dirty={dirty} saving={saving} onClick={handleSave} />
         <Button size="sm" variant="outline" onClick={handleFormat}>
           Format
         </Button>

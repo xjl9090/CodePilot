@@ -39,6 +39,7 @@ export function AssistantPanel() {
   }, []);
 
   return (
+    // Round 5: right rail back to opaque per user request.
     <div className="flex h-full flex-col border-l border-border bg-background">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-3 py-2">

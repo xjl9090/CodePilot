@@ -35,15 +35,32 @@ export function WorkspaceSidebar() {
 
   if (!state.open) return null;
 
+  // Round 32 (Codex P1/P2) — two-layer card structure:
+  //   outer frame: shadow + overflow visible (won't clip its own shadow)
+  //   inner surface: clip-path + radius + bg + content
+  // ResizeHandle stays as a sibling of the frame so its 4px slot
+  // lives in the gutter, not inside the card.
+  // Round 32 (Codex P1/P2) — two-layer card structure with
+  // ResizeHandle as flex sibling on the left.
   return (
-    <div className="flex h-full shrink-0 overflow-hidden" data-workspace-sidebar>
-      <ResizeHandle side="left" onResize={handleResize} />
+    <div className="flex h-full shrink-0">
+      <ResizeHandle
+        side="left"
+        onResize={handleResize}
+        onReset={() => setWidth(360)}
+      />
       <div
-        className="flex h-full flex-col overflow-hidden border-l border-border/40 bg-background"
+        data-platform-card-frame="workspace"
+        className="h-full"
         style={{ width: state.width }}
       >
-        <TabBar />
-        <TabPanel />
+        <div
+          data-workspace-sidebar
+          className="flex h-full flex-col overflow-hidden bg-background"
+        >
+          <TabBar />
+          <TabPanel />
+        </div>
       </div>
     </div>
   );

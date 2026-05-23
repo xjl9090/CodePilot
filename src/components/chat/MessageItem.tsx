@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect, useMemo, memo } from 'react';
+import { motion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import type { Message, TokenUsage, FileAttachment, MediaBlock } from '@/types';
 import {
@@ -716,17 +717,27 @@ export const MessageItem = memo(function MessageItem({ message, sessionId, isAss
         {displayText && (
           isUser ? (
             <div className="relative">
-              <div
+              {/* Round 14 (2026-05-23): switched the long-message
+                  collapse from a CSS `transition: max-height` to
+                  framer-motion `animate={{ height }}`. The CSS path
+                  toggled between `maxHeight: 300px` and `undefined`
+                  (== auto), which cannot interpolate — so expanding
+                  and collapsing snapped instantly and looked like a
+                  jarring flicker. motion.div measures the real
+                  content height at run-time and tweens between the
+                  collapsed pixel value and "auto" smoothly.
+                  `initial={false}` skips a play on first paint so
+                  long messages don't unfurl when they're rendered.
+                  `overflow: hidden` clips the in-flight measure. */}
+              <motion.div
                 ref={contentRef}
-                className="text-sm whitespace-pre-wrap break-words transition-[max-height] duration-300 ease-in-out overflow-hidden"
-                style={
-                  isOverflowing && !isExpanded
-                    ? { maxHeight: `${COLLAPSE_HEIGHT}px` }
-                    : undefined
-                }
+                className="text-sm whitespace-pre-wrap break-words overflow-hidden"
+                initial={false}
+                animate={{ height: isOverflowing && !isExpanded ? COLLAPSE_HEIGHT : "auto" }}
+                transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
               >
                 {displayText}
-              </div>
+              </motion.div>
               {isOverflowing && !isExpanded && (
                 <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-muted to-transparent pointer-events-none" />
               )}
@@ -908,23 +919,35 @@ function PinnableWidget({ widgetCode, title }: {
     }
   }, [widgetCode, title]);
 
+  // Card action button class — shared geometry / colors used by widget
+  // toolbar and (round 12 onwards) the Markdown table + code block
+  // toolbars. h-7 / text-xs / rounded-md gives a readable hit target
+  // without dominating the card chrome. Permanent (no opacity-0
+  // hover gate) per round 12 design refresh.
+  // `justify-center` (round 13) keeps the icon centered inside
+  // icon-only variants (h-7 w-7 px-0). Without it, the icon hugs
+  // the button's left edge and the hover background visibly offsets
+  // from the glyph.
+  const cardActionBtn = "h-7 px-2 gap-1 inline-flex items-center justify-center rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:pointer-events-none";
+
   const buttons = (
     <>
       {workingDirectory && (
         <button
-          className="text-[10px] px-1.5 py-0.5 rounded text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50 disabled:opacity-30 flex items-center gap-0.5"
+          className={cardActionBtn}
           onClick={handlePin}
           disabled={cooldown}
         >
-          <CodePilotIcon name="pin" size={12} aria-hidden />
+          <CodePilotIcon name="pin" size="sm" aria-hidden />
           Pin
         </button>
       )}
       <button
-        className="text-[10px] px-1.5 py-0.5 rounded text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50 flex items-center gap-0.5"
+        className={cn(cardActionBtn, "h-7 w-7 px-0")}
         onClick={handleExport}
+        aria-label="Export PNG"
       >
-        <CodePilotIcon name="download" size={12} aria-hidden />
+        <CodePilotIcon name="download" size="sm" aria-hidden />
       </button>
     </>
   );

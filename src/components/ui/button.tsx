@@ -9,9 +9,19 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        // `[&_svg]:!text-current` forces nested icons to follow the
+        // button's foreground color. Without this, <CodePilotIcon>'s
+        // default `text-muted-foreground` (light/secondary) leaks onto
+        // dark primary buttons and the icon visually fades into the
+        // dark background (user-reported: "深色按钮里图标灰色辨识度
+        // 不够"). `text-current` + `!` beats the icon's own class
+        // regardless of cascade order. Same fix applied on
+        // `destructive` (white foreground on red) for the same reason;
+        // outline / secondary / ghost / link inherit from foreground
+        // colors and don't need the override.
+        default: "bg-primary text-primary-foreground hover:bg-primary/80 [&_svg]:!text-current",
         destructive:
-          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60 [&_svg]:!text-current",
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground dark:bg-transparent dark:hover:bg-input/30",
         secondary:
