@@ -32,8 +32,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useState } from "react";
 import { usePanel } from "@/hooks/usePanel";
-import { ResizeHandle } from "./ResizeHandle";
-import { CardFrame, CardSurface } from "./card-primitives";
+import { CardFrame, CardSurface, ResizeGutter } from "./card-primitives";
 
 const FileTreePanel = dynamic(
   () => import("./panels/FileTreePanel").then((m) => ({ default: m.FileTreePanel })),
@@ -65,8 +64,7 @@ export function PanelZone() {
       {assistantPanelOpen && <AssistantPanel />}
       {fileTreeOpen && (
         <>
-          <ResizeHandle
-            side="left"
+          <ResizeGutter
             onResize={handleTreeResize}
             onReset={() => setTreeWidth(TREE_DEFAULT_WIDTH)}
           />

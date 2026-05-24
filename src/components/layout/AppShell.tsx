@@ -7,8 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 // NavRail removed — navigation merged into ChatListPanel
 import { ChatListPanel } from "./ChatListPanel";
 import { SettingsSidebar } from "./SettingsSidebar";
-import { ResizeHandle } from "./ResizeHandle";
-import { CardFrame, CardSurface } from "./card-primitives";
+import { CardFrame, CardSurface, ResizeGutter } from "./card-primitives";
 import { UpdateBanner } from "./UpdateBanner";
 import { UnifiedTopBar } from "./UnifiedTopBar";
 import { WorkspaceSidebarProvider, useWorkspaceSidebar, useWorkspaceSidebarOptional } from "@/hooks/useWorkspaceSidebar";
@@ -181,14 +180,11 @@ function ChatContentRow({
           </main>
         </CardSurface>
       </CardFrame>
-      {/* Workspace sidebar: ResizeHandle as sibling of the frame so its
-          slot lives in the gutter between main and workspace, not
-          inside the workspace card. WorkspaceSidebar now renders only
-          the inner Tab content (Phase 7c-C). */}
+      {/* Workspace sidebar: ResizeGutter as sibling of the frame so
+          its visible line lands in the gap between main and workspace. */}
       {isChatDetailRoute && ws.state.open && (
         <>
-          <ResizeHandle
-            side="left"
+          <ResizeGutter
             onResize={handleWorkspaceResize}
             onReset={() => ws.setWidth(360)}
           />
@@ -745,8 +741,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </CardFrame>
                 )}
                 {chatListOpen && (
-                  <ResizeHandle
-                    side="left"
+                  <ResizeGutter
                     onResize={handleChatListResize}
                     onResizeEnd={handleChatListResizeEnd}
                     onReset={() => {

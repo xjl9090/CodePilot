@@ -416,7 +416,7 @@ html.dark[data-platform="darwin"][data-shell="electron"][data-platform-style="au
     overflow-clip-margin: 80px;
   }
   html[data-platform="darwin"][data-shell="electron"][data-platform-style="auto"] [data-app-content-row] {
-    gap: 8px;
+    gap: 0;
     overflow: clip;
     overflow-clip-margin: 80px;
   }
