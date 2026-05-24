@@ -137,18 +137,24 @@ describe('right-rail panels are additive — neither button forces the other to 
   it('the AppShell layout still renders both rails as siblings so they can be open simultaneously', () => {
     // The flexbox layout in ChatContentRow places <WorkspaceSidebar/>
     // and <PanelZone/> as siblings; both can be visible at the same
-    // time and the inner <main> shrinks. Pin both being rendered
-    // (under the isChatDetailRoute guard) so a future "let me unify
-    // these into one rail" refactor has to update this test and
-    // re-read the v13 decision.
+    // time and the inner <main> shrinks.
+    //
+    // Phase 7c-C update: WorkspaceSidebar is now nested inside a
+    // <CardFrame kind="workspace"> + <CardSurface kind="workspace">
+    // pair and guarded by an additional `ws.state.open` check, but it
+    // still mounts under `isChatDetailRoute` and stays a sibling of
+    // <PanelZone />. We assert that both `<WorkspaceSidebar />` and
+    // `<PanelZone />` appear in the source guarded by `isChatDetailRoute`
+    // somewhere, without pinning the exact JSX shape around them so
+    // future refactors of the chrome layer don't break this invariant.
     assert.match(
       APPSHELL,
-      /\{isChatDetailRoute\s*&&\s*<WorkspaceSidebar\s*\/>\}/,
-      'AppShell must render <WorkspaceSidebar /> under the isChatDetailRoute guard',
+      /isChatDetailRoute[\s\S]{0,400}<WorkspaceSidebar\s*\/>/,
+      'AppShell must render <WorkspaceSidebar /> under an isChatDetailRoute guard',
     );
     assert.match(
       APPSHELL,
-      /\{isChatDetailRoute\s*&&\s*<PanelZone\s*\/>\}/,
+      /isChatDetailRoute\s*&&\s*<PanelZone\s*\/>/,
       'AppShell must render <PanelZone /> under the same guard so it can coexist with the sidebar',
     );
   });

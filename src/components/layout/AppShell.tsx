@@ -11,7 +11,7 @@ import { ResizeHandle } from "./ResizeHandle";
 import { CardFrame, CardSurface } from "./card-primitives";
 import { UpdateBanner } from "./UpdateBanner";
 import { UnifiedTopBar } from "./UnifiedTopBar";
-import { WorkspaceSidebarProvider, useWorkspaceSidebarOptional } from "@/hooks/useWorkspaceSidebar";
+import { WorkspaceSidebarProvider, useWorkspaceSidebar, useWorkspaceSidebarOptional } from "@/hooks/useWorkspaceSidebar";
 import { PanelContext, usePanel, type PreviewViewMode, type PreviewSource } from "@/hooks/usePanel";
 import { UpdateContext } from "@/hooks/useUpdate";
 import { useUpdateChecker } from "@/hooks/useUpdateChecker";
@@ -156,29 +156,22 @@ function ChatContentRow({
   isSplitActive: boolean;
   children: React.ReactNode;
 }) {
-  // Round 20+ — ChatContentRow returns a Fragment so the main
-  // column, workspace sidebar, and panel zone live as direct
-  // children of the outer `data-app-content-row` flex. This lets
-  // the same `gap: 4px` rule that spaces ChatListPanel from
-  // ChatContentRow also space main / workspace / panel from each
-  // other — otherwise the four "floating cards" the user asked
-  // for would have inconsistent spacing (left gutter 4 px,
-  // workspace/panel gutter 0 px).
+  // Phase 7c-C — main column and workspace sidebar both wrapped in
+  // CardFrame + CardSurface. WorkspaceSidebar is now just inner TabBar
+  // + TabPanel content; its width state and ResizeHandle wiring live
+  // here so the row's layout geometry is in one place.
+  const ws = useWorkspaceSidebar();
+  const handleWorkspaceResize = useCallback(
+    (delta: number) => {
+      ws.setWidth(ws.state.width - delta);
+    },
+    [ws],
+  );
+
   return (
     <>
-      {/* Round 32 (Codex P1/P2 fix) — main column wrapped in an outer
-          `card-frame` whose only job is `box-shadow + overflow visible`.
-          Inner surface keeps clip-path + radius + bg. Separating
-          these means clip-path can never crop the surrounding shadow,
-          and the shadow can never bleed past the rounded mask. */}
-      <div
-        data-platform-card-frame="main"
-        className="flex min-w-0 flex-1 h-full"
-      >
-        <div
-          data-platform-main-content
-          className="flex flex-1 flex-col overflow-hidden bg-background"
-        >
+      <CardFrame kind="main">
+        <CardSurface kind="main">
           <main className="relative flex-1 overflow-hidden">
             {isSplitActive ? (
               <SplitChatContainer />
@@ -186,21 +179,26 @@ function ChatContentRow({
               <ErrorBoundary>{children}</ErrorBoundary>
             )}
           </main>
-        </div>
-      </div>
-      {/* Right rail composition (post-Phase 2, 2026-04-30):
-          - WorkspaceSidebar = unified Tab shell. Fixed Git / Widget
-            Tabs, plus dynamic Markdown / Artifact / file preview
-            Tabs created by the chat / file tree click paths. Toggled
-            from the topbar `SidebarSimple` button.
-          - PanelZone = light right rail with FileTreePanel +
-            AssistantPanel. The Git / Widget / Preview channels were
-            removed when those surfaces moved into the sidebar; the
-            file tree intentionally remained here as an independent
-            high-frequency entry per the Phase 2 product boundary.
-          v13: the two are additive in the OPEN state — both can be
-          mounted at once and the chat area shrinks accordingly. */}
-      {isChatDetailRoute && <WorkspaceSidebar />}
+        </CardSurface>
+      </CardFrame>
+      {/* Workspace sidebar: ResizeHandle as sibling of the frame so its
+          slot lives in the gutter between main and workspace, not
+          inside the workspace card. WorkspaceSidebar now renders only
+          the inner Tab content (Phase 7c-C). */}
+      {isChatDetailRoute && ws.state.open && (
+        <>
+          <ResizeHandle
+            side="left"
+            onResize={handleWorkspaceResize}
+            onReset={() => ws.setWidth(360)}
+          />
+          <CardFrame kind="workspace" width={ws.state.width}>
+            <CardSurface kind="workspace">
+              <WorkspaceSidebar />
+            </CardSurface>
+          </CardFrame>
+        </>
+      )}
       {isChatDetailRoute && <PanelZone />}
     </>
   );
