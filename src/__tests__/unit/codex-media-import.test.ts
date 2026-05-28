@@ -27,13 +27,29 @@
  *     /api/media/serve route handler.
  */
 
-import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
+// CRITICAL — this side-effect import MUST be first. It sets
+// CLAUDE_GUI_DATA_DIR to a fresh test root BEFORE any @/lib import
+// chain triggers `src/lib/db.ts` module-load (which captures the env
+// var at module-load time). Without this, db.ts captures the user's
+// real ~/.codepilot path and tests leak rows into the real DB
+// (tech-debt #25). See _codex-media-import-env.ts for full background.
+import { CODEX_MEDIA_TEST_ROOT, REAL_USER_DB_PATH } from './_codex-media-import-env';
+
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import Database from 'better-sqlite3';
 import { materializeCodexEventMedia } from '@/lib/codex/media-import';
 import type { RuntimeRunEvent } from '@/lib/runtime/contract';
+
+// `tempDir` now resolves to the SAME test root (which is the dataDir
+// db.ts captured). Tests that previously assumed a fresh dataDir per
+// test still get a fresh source-file subdir; the DB + media dir are
+// shared across tests in this file (intentionally — distinct sessionIds
+// keep rows separate, and a single shared DB is faster).
+const tempDir = CODEX_MEDIA_TEST_ROOT;
 
 // Minimal PNG (8x8 transparent) we drop in a temp dir as the
 // "Codex-handed-to-us" source file. importFileToLibrary needs a real
@@ -42,36 +58,57 @@ import type { RuntimeRunEvent } from '@/lib/runtime/contract';
 const TINY_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAFklEQVR4AWMAAQAABQABDQottAAAAABJRU5ErkJggg==';
 
-let tempDir: string;
-let originalDataDir: string | undefined;
+/** Regression guard (tech-debt #25): snapshot the user's REAL DB codex
+ *  row count at suite start so the `after` hook can prove this file
+ *  did NOT leak any new rows into it. If the real DB doesn't exist
+ *  (fresh machine / CI), the guard short-circuits. */
+let realDbCodexRowsBefore: number | null = null;
+
+function countRealCodexRows(): number | null {
+  if (!fs.existsSync(REAL_USER_DB_PATH)) return null;
+  const db = new Database(REAL_USER_DB_PATH, { readonly: true });
+  try {
+    const row = db
+      .prepare("SELECT COUNT(*) AS n FROM media_generations WHERE provider = 'codex'")
+      .get() as { n: number };
+    return row.n;
+  } finally {
+    db.close();
+  }
+}
 
 before(() => {
-  originalDataDir = process.env.CLAUDE_GUI_DATA_DIR;
+  realDbCodexRowsBefore = countRealCodexRows();
 });
 
 after(() => {
-  if (originalDataDir === undefined) {
-    delete process.env.CLAUDE_GUI_DATA_DIR;
-  } else {
-    process.env.CLAUDE_GUI_DATA_DIR = originalDataDir;
-  }
-});
-
-beforeEach(() => {
-  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-media-import-'));
-  process.env.CLAUDE_GUI_DATA_DIR = tempDir;
-});
-
-afterEach(async () => {
-  // Close any DB handle the test opened via importFileToLibrary so
-  // the temp dir can be cleaned up.
+  // Close the test-DB handle so the test root can be removed.
   try {
-    const { closeDb } = await import('../../lib/db');
-    closeDb();
+    // Dynamic import — closeDb may not exist on all branches.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { closeDb } = require('../../lib/db');
+    closeDb?.();
   } catch {
     /* ignore */
   }
-  fs.rmSync(tempDir, { recursive: true, force: true });
+  // Regression guard: assert the REAL DB has NOT gained any codex rows
+  // during this test file. If it has, the isolation broke again and
+  // every future `npm test` run will keep adding garbage to the user's
+  // media library. (tech-debt #25 root cause guard.)
+  const after = countRealCodexRows();
+  if (realDbCodexRowsBefore !== null && after !== null) {
+    assert.equal(
+      after,
+      realDbCodexRowsBefore,
+      `codex-media-import.test.ts leaked ${after - realDbCodexRowsBefore} provider='codex' rows into the REAL user DB at ${REAL_USER_DB_PATH}. Tech-debt #25 regressed — investigate _codex-media-import-env.ts ordering / db.ts capture behavior.`,
+    );
+  }
+  // Best-effort cleanup of the shared test root.
+  try {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  } catch {
+    /* ignore */
+  }
 });
 
 function buildSourcePng(): string {
