@@ -20,8 +20,8 @@
 | Phase | 内容 | 类型 | 优先级 | 状态 |
 |-------|------|------|--------|------|
 | A | 模型目录：接入 Opus 4.8 + 修 Sonnet 4.6 别名（#23） | A 可见 | **高**（发送正确性 + 新模型） | ✅ **完成**（代码 9d98029 + Codex review 2 补丁 c90b6f8；真实凭据 smoke 用户确认通过 2026-05-29） |
-| B | 用户信任 bug：Mac 通知不弹（#34）+ pin-incomplete 误报（#27） | A 可见 | 高 | 🔄 #27 ✅ 代码+测试（commit e1ccb3b）；#34 待做 |
-| C | 能力/平台正确性：Plan 模式 Widget（#26）+ Windows shell 方言（#28） | A 可见 | 中 | 📋 待审 |
+| B | 用户信任 bug：Mac 通知不弹（#34）+ pin-incomplete 误报（#27） | A 可见 | 高 | 🔄 #27 ✅（e1ccb3b）；#34 观测已加（0605b80）——代码链通，根因（dev 权限 / 前台横幅抑制）待运行时确认 |
+| C | 能力/平台正确性：Plan 模式 Widget（#26）+ Windows shell 方言（#28） | A 可见 | 中 | ✅ #26 代码+测试（f32275f）；✅ #28 代码+测试（970a1fa），Windows 真机验收待 |
 | D0 | flake + no-verify 事件记入 tech-debt #30 | C 文档 | 中 | ✅ 已完成 |
 | D1 | pre-commit enforce / set -e（#30 核心止血：任一检查失败即停） | C 基础设施 | 高 | ✅ 已完成（commit e10fa1d） |
 | D2 | react-hooks 存量 16 error（9 高频组件）+ apply-discovery-diff 间歇 flake | C 工程债 | 中 | 📋 留债（on-touch / 单开专项） |
