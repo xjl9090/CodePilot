@@ -201,7 +201,7 @@ A 类面专属（Chat 消息 / /plugins / Workspace / 素材库等）从 "Anchor
 ## Open Questions（待 Codex / 用户核对）
 
 1. ~~Opus 4.8 是否设默认 / `opus` 别名指向~~ **已定（Codex review）**：首轮**不切**，只新增显式 `claude-opus-4-8`，`opus` 别名 / 默认保持 4.7；切换待真实 smoke 后由用户拍板。
-2. ~~OpenRouter slug + 1M beta header~~ **已拆**：OpenRouter Opus 4.8 → **deferred**（未经 OpenRouter 官方 / 接口确认不接、不臆测 slug）；1M beta header / context window / thinking / effort → 纳入 Phase A"开工前核验"，对照 Anthropic 官方核实。
+2. ~~OpenRouter slug + 1M beta header~~ **已定并接入**：OpenRouter Opus 4.8 = `anthropic/claude-opus-4.8`（Codex 经 OpenRouter 官方页确认），**本轮已接入**（commit 9d98029，显式 fixture，不臆测）；1M context / adaptive thinking / effort 默认 high 按 Anthropic 官方核实已落 Phase A。真实凭据 smoke 仍待跑（见 Smoke Ledger）。
 3. **#34 的真实断点**：通知没弹是"任务没调到通知出口"还是"系统通知权限/IPC 丢上下文"——需先定位再定修法。
 4. **#30 存量 error 的确切清单**：开工前先 `npm run lint`/eslint 跑一遍确认当前 error 数与文件，再决定清理范围。
 5. **Phase 拆分粒度**：A-E 是否进一步拆成独立 PR / 提交，由实现时按 Tier 决定（A/C 含 Tier 2，需 guardrail + smoke）。

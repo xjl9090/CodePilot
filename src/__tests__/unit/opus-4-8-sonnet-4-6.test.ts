@@ -21,6 +21,8 @@ import { getContextWindow } from '../../lib/model-context';
 
 const LIB = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../lib');
 const read = (f: string) => fs.readFileSync(path.join(LIB, f), 'utf8');
+const SRC = path.resolve(LIB, '..');
+const readSrc = (f: string) => fs.readFileSync(path.join(SRC, f), 'utf8');
 
 describe('Opus 4.7+ adaptive-thinking family (4.7 + 4.8) — param generalization', () => {
   it('detects 4.7 and 4.8 (dash / dated / short id); excludes 4.6 and Sonnet', () => {
@@ -28,6 +30,10 @@ describe('Opus 4.7+ adaptive-thinking family (4.7 + 4.8) — param generalizatio
     assert.equal(isOpusAdaptiveThinkingModel('claude-opus-4-8'), true);
     assert.equal(isOpusAdaptiveThinkingModel('opus-4-8'), true);
     assert.equal(isOpusAdaptiveThinkingModel('us.anthropic.claude-opus-4-8-v1:0'), true);
+    // dotted OpenRouter slug must also match (Codex review P2 — don't rely on
+    // the assumption that dotted upstream never reaches this sanitizer)
+    assert.equal(isOpusAdaptiveThinkingModel('anthropic/claude-opus-4.8'), true);
+    assert.equal(isOpusAdaptiveThinkingModel('anthropic/claude-opus-4.7'), true);
     assert.equal(isOpusAdaptiveThinkingModel('claude-opus-4-20250514'), false); // Opus 4.6
     assert.equal(isOpusAdaptiveThinkingModel('claude-sonnet-4-6'), false);
     assert.equal(isOpusAdaptiveThinkingModel(undefined), false);
@@ -124,5 +130,27 @@ describe('#23 Sonnet 4.6 alias → upstream (no stale Sonnet 4.0 / 4.5 fallback)
     for (const f of ['onboarding-processor.ts', 'checkin-processor.ts']) {
       assert.doesNotMatch(read(f), /'claude-sonnet-4-20250514'/);
     }
+  });
+});
+
+describe('#23 Sonnet 4.6 — API route layer (Codex review P1: providers/models, skills/search, media plan)', () => {
+  it('providers/models route: DEFAULT_MODELS + ENV_ALIAS sonnet → claude-sonnet-4-6 (no Sonnet 4.0)', () => {
+    const src = readSrc('app/api/providers/models/route.ts');
+    assert.doesNotMatch(src, /'claude-sonnet-4-20250514'/);
+    assert.match(src, /upstreamModelId:\s*'claude-sonnet-4-6'/);
+    assert.match(src, /sonnet:\s*'claude-sonnet-4-6'/);
+  });
+  it('skills/search MODEL_MAP: no stale sonnet 4.0 / opus 4.6 / old haiku', () => {
+    const src = readSrc('app/api/skills/search/route.ts');
+    assert.doesNotMatch(src, /'claude-sonnet-4-20250514'/);
+    assert.doesNotMatch(src, /'claude-opus-4-20250514'/); // Opus 4.6
+    assert.doesNotMatch(src, /'claude-haiku-4-20250414'/);
+    assert.match(src, /sonnet:\s*'claude-sonnet-4-6'/);
+    assert.match(src, /opus:\s*'claude-opus-4-7'/);
+  });
+  it('media/jobs/plan fallback → claude-sonnet-4-6 (no Sonnet 4.0)', () => {
+    const src = readSrc('app/api/media/jobs/plan/route.ts');
+    assert.doesNotMatch(src, /'claude-sonnet-4-20250514'/);
+    assert.match(src, /'claude-sonnet-4-6'/);
   });
 });

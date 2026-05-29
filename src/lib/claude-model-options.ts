@@ -54,10 +54,12 @@ export interface ClaudeModelOptionsOutput {
 
 // Opus 4.7 and 4.8 share the adaptive-thinking contract (no manual extended
 // thinking; 1M context by default). Add future same-family versions to the
-// `[78]` character class. (The OpenRouter dotted upstream `claude-opus-4.8`
-// goes through the OpenAI SDK, not this Anthropic-SDK sanitizer, so only the
-// dash form needs to match here.)
-const OPUS_ADAPTIVE_THINKING_PATTERN = /opus-?4-?[78]/i;
+// `[78]` character class. Matches BOTH the dash upstream (`claude-opus-4-8`,
+// first-party) and the dotted slug (`anthropic/claude-opus-4.8`, OpenRouter):
+// OpenRouter currently routes via the OpenAI SDK, but a future Anthropic-skin
+// / provider override could send the dotted form here, so we don't rely on
+// that assumption (Codex review P2, 2026-05-29).
+const OPUS_ADAPTIVE_THINKING_PATTERN = /opus-?4[-.]?[78]/i;
 
 export function isOpusAdaptiveThinkingModel(model: string | undefined): boolean {
   if (!model) return false;

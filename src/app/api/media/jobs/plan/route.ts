@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     });
     // Preserve 'env' semantics (see onboarding route for rationale)
     const providerId = resolved.provider?.id || 'env';
-    const modelId = resolved.upstreamModel || resolved.model || session?.model || 'claude-sonnet-4-20250514';
+    const modelId = resolved.upstreamModel || resolved.model || session?.model || 'claude-sonnet-4-6';
 
     // Read document content
     let docContent = body.docContent || '';

@@ -31,7 +31,7 @@ const DEFAULT_MODELS = [
   {
     value: 'sonnet',
     label: 'Sonnet 4.6',
-    upstreamModelId: 'claude-sonnet-4-20250514',
+    upstreamModelId: 'claude-sonnet-4-6',
     supportsEffort: true,
     supportedEffortLevels: ['low', 'medium', 'high', 'max'],
     supportsAdaptiveThinking: true,
@@ -57,7 +57,7 @@ const DEFAULT_MODELS = [
 // return bare aliases (sonnet/opus/haiku). Mirrors the env provider's
 // alias table in provider-resolver.ts.
 const ENV_ALIAS_TO_UPSTREAM: Record<string, string> = {
-  sonnet: 'claude-sonnet-4-20250514',
+  sonnet: 'claude-sonnet-4-6',
   opus: 'claude-opus-4-7',
   haiku: 'claude-haiku-4-5-20251001',
 };
