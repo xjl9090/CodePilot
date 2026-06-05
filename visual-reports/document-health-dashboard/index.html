@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CodePilot 文档体系健康看板</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f4f1ea;
+        --panel: rgba(255, 255, 255, 0.82);
+        --panel-strong: rgba(255, 255, 255, 0.95);
+        --ink: #252525;
+        --muted: #6b6861;
+        --line: rgba(30, 30, 30, 0.11);
+        --ok: #23866c;
+        --warn: #c6802e;
+        --bad: #c34d3f;
+        --blue: #4077b8;
+        --violet: #7b61b8;
+        --shadow: 0 18px 48px rgba(60, 48, 30, 0.12);
+        --radius: 18px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family:
+          ui-sans-serif,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 12% 4%, rgba(64, 119, 184, 0.18), transparent 28%),
+          radial-gradient(circle at 90% 12%, rgba(195, 77, 63, 0.12), transparent 30%),
+          linear-gradient(135deg, #f7f3ea 0%, #ece8df 54%, #f5f0e8 100%);
+      }
+
+      main {
+        width: min(1280px, calc(100vw - 40px));
+        margin: 0 auto;
+        padding: 34px 0 48px;
+      }
+
+      header {
+        display: grid;
+        grid-template-columns: 1.4fr 0.8fr;
+        gap: 18px;
+        align-items: stretch;
+        margin-bottom: 18px;
+      }
+
+      .hero,
+      .card {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+      }
+
+      .hero {
+        padding: 28px;
+      }
+
+      .eyebrow {
+        color: var(--muted);
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 10px 0 12px;
+        font-size: clamp(32px, 5vw, 58px);
+        line-height: 1;
+        letter-spacing: 0;
+      }
+
+      .summary {
+        max-width: 760px;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.72;
+      }
+
+      .hero-note {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 22px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 30px;
+        padding: 6px 11px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.55);
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .card {
+        padding: 20px;
+      }
+
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+
+      .metric {
+        padding: 18px;
+      }
+
+      .metric-value {
+        margin-top: 8px;
+        font-size: clamp(30px, 4vw, 46px);
+        font-weight: 750;
+        line-height: 1;
+      }
+
+      .metric-label {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .metric-foot {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+
+      .wide {
+        grid-column: 1 / -1;
+      }
+
+      .section-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: baseline;
+        margin-bottom: 16px;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: 20px;
+      }
+
+      .subtle {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .donut-wrap {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        gap: 22px;
+        align-items: center;
+      }
+
+      .donut {
+        --hard: 2.5%;
+        --relocate: 5.8%;
+        --paused: 2.9%;
+        width: 210px;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle at center, var(--panel-strong) 0 47%, transparent 48%),
+          conic-gradient(
+            var(--bad) 0 var(--hard),
+            var(--warn) var(--hard) calc(var(--hard) + var(--relocate)),
+            var(--violet) calc(var(--hard) + var(--relocate)) calc(var(--hard) + var(--relocate) + var(--paused)),
+            var(--ok) 0
+          );
+        display: grid;
+        place-items: center;
+        position: relative;
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+      }
+
+      .donut-center {
+        text-align: center;
+      }
+
+      .donut-center strong {
+        display: block;
+        font-size: 34px;
+      }
+
+      .legend {
+        display: grid;
+        gap: 12px;
+      }
+
+      .legend-row {
+        display: grid;
+        grid-template-columns: 14px 1fr auto;
+        gap: 10px;
+        align-items: center;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+
+      .bar-list {
+        display: grid;
+        gap: 11px;
+      }
+
+      .bar-row {
+        display: grid;
+        grid-template-columns: 150px 1fr 78px;
+        gap: 12px;
+        align-items: center;
+        font-size: 13px;
+      }
+
+      .bar-track {
+        height: 12px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.07);
+        overflow: hidden;
+      }
+
+      .bar {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--blue), var(--ok));
+      }
+
+      .active-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+      }
+
+      .active-box {
+        padding: 14px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.52);
+        border: 1px solid var(--line);
+      }
+
+      .active-box strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 24px;
+      }
+
+      .todo {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .todo li {
+        display: grid;
+        grid-template-columns: 28px 1fr;
+        gap: 10px;
+        align-items: start;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.5);
+      }
+
+      .rank {
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--ink);
+        color: white;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .file-list {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      code {
+        color: var(--ink);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      @media (max-width: 920px) {
+        header,
+        .grid,
+        .metric-grid,
+        .donut-wrap,
+        .active-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .bar-row {
+          grid-template-columns: 112px 1fr 56px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <section class="hero">
+          <div class="eyebrow">CodePilot document system audit</div>
+          <h1>文档体系健康看板</h1>
+          <p class="summary">
+            这是一份给研发协作使用的静态看板。全仓已跟踪文档共 261 份，其中 243 份是 CodePilot 自有文档，另外 18 份来自
+            <code>资料/</code> 下的第三方参考包。结论很清楚：文档量不失控，真正需要治理的是
+            <code>docs/exec-plans/active</code> 的语义污染。
+          </p>
+          <div class="hero-note">
+            <span class="pill">生成时间：2026-06-05</span>
+            <span class="pill">口径：tracked files only</span>
+            <span class="pill">不接外部依赖，直接打开 HTML</span>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-title">
+            <h2>一句话判断</h2>
+          </div>
+          <p class="summary">
+            文档约等于代码量的 <strong>21%</strong>，这是健康的工程文档密度。风险点不是“文档太多”，而是
+            active 目录里混着当前计划、暂停计划、被接管计划和发布前计划，容易误导 Codex / Claude Code 开错支线。
+          </p>
+        </section>
+      </header>
+
+      <section class="metric-grid">
+        <div class="card metric">
+          <div class="metric-label">自有文档数量</div>
+          <div class="metric-value">243</div>
+          <div class="metric-foot">全仓跟踪文档 261，含 18 份参考包文档</div>
+        </div>
+        <div class="card metric">
+          <div class="metric-label">文档行数</div>
+          <div class="metric-value">56.7K</div>
+          <div class="metric-foot">约 56,665 行</div>
+        </div>
+        <div class="card metric">
+          <div class="metric-label">代码行数</div>
+          <div class="metric-value">264.6K</div>
+          <div class="metric-foot">TS / TSX / JS / CSS / JSON 等</div>
+        </div>
+        <div class="card metric">
+          <div class="metric-label">文档 / 代码</div>
+          <div class="metric-value">21%</div>
+          <div class="metric-foot">按行数约 1 : 4.7</div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <div class="section-title">
+            <h2>过时风险分布</h2>
+            <span class="subtle">以 243 份 CodePilot 自有文档为治理基数</span>
+          </div>
+          <div class="donut-wrap">
+            <div class="donut" aria-label="文档健康占比">
+              <div class="donut-center">
+                <strong>~91%</strong>
+                <span class="subtle">可保留</span>
+              </div>
+            </div>
+            <div class="legend">
+              <div class="legend-row">
+                <span class="dot" style="background: var(--bad)"></span>
+                <span>硬过时：应更新或归档</span>
+                <strong>6</strong>
+              </div>
+              <div class="legend-row">
+                <span class="dot" style="background: var(--warn)"></span>
+                <span>位置过时：Superseded 但仍在 active</span>
+                <strong>7</strong>
+              </div>
+              <div class="legend-row">
+                <span class="dot" style="background: var(--violet)"></span>
+                <span>暂停项：保留但不应作为当前入口</span>
+                <strong>7</strong>
+              </div>
+              <div class="legend-row">
+                <span class="dot" style="background: var(--ok)"></span>
+                <span>正常历史 / 当前文档</span>
+                <strong>223</strong>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="section-title">
+            <h2>active 目录实际状态</h2>
+            <span class="subtle">23 份执行计划，含本治理计划</span>
+          </div>
+          <div class="active-grid">
+            <div class="active-box">
+              <strong style="color: var(--ok)">3</strong>
+              <span class="subtle">真正当前：issue tracker / 开发流程 / 文档治理</span>
+            </div>
+            <div class="active-box">
+              <strong style="color: var(--bad)">6</strong>
+              <span class="subtle">已完成后仍在 active</span>
+            </div>
+            <div class="active-box">
+              <strong style="color: var(--warn)">7</strong>
+              <span class="subtle">Superseded，应移出 active</span>
+            </div>
+            <div class="active-box">
+              <strong style="color: var(--violet)">7</strong>
+              <span class="subtle">暂停项，应进入 deferred</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="card wide">
+          <div class="section-title">
+            <h2>文档分布</h2>
+            <span class="subtle">按文件数排序</span>
+          </div>
+          <div class="bar-list">
+            <div class="bar-row"><span>Research</span><div class="bar-track"><div class="bar" style="width: 100%"></div></div><strong>42</strong></div>
+            <div class="bar-row"><span>Handover</span><div class="bar-track"><div class="bar" style="width: 98%"></div></div><strong>41</strong></div>
+            <div class="bar-row"><span>Completed plans</span><div class="bar-track"><div class="bar" style="width: 88%"></div></div><strong>37</strong></div>
+            <div class="bar-row"><span>Site docs</span><div class="bar-track"><div class="bar" style="width: 86%"></div></div><strong>36</strong></div>
+            <div class="bar-row"><span>Active plans</span><div class="bar-track"><div class="bar" style="width: 55%"></div></div><strong>23</strong></div>
+            <div class="bar-row"><span>Insights</span><div class="bar-track"><div class="bar" style="width: 52%"></div></div><strong>22</strong></div>
+            <div class="bar-row"><span>Guardrails</span><div class="bar-track"><div class="bar" style="width: 31%"></div></div><strong>13</strong></div>
+            <div class="bar-row"><span>Future</span><div class="bar-track"><div class="bar" style="width: 19%"></div></div><strong>8</strong></div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="section-title">
+            <h2>最该处理的 6 份</h2>
+            <span class="subtle">硬过时</span>
+          </div>
+          <ul class="file-list">
+            <li><code>active/refactor-closeout.md</code>：仍像 Phase 7 进行中，实际已合并发布。</li>
+            <li><code>active/main-merge-readiness.md</code>：合并计划已完成，应归档。</li>
+            <li><code>active/preview-build-readiness.md</code>：preview 阶段已进入正式 release。</li>
+            <li><code>active/preview-final-blockers.md</code>：blocker 已完成，仍在 active。</li>
+            <li><code>active/merge-blockers-chat-ownership-openrouter.md</code>：#37 已修，阻塞状态已过期。</li>
+            <li><code>active/phase-7b-macos-native-visual-profile.md</code>：收口边界已定，应归档或转 deferred。</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <div class="section-title">
+            <h2>建议治理动作</h2>
+            <span class="subtle">按收益排序</span>
+          </div>
+          <ol class="todo">
+            <li><span class="rank">1</span><span>先建立 <code>deferred/</code> 与 <code>superseded/</code> 的目录语义，并让 docs drift 认识新目录，但先不启用硬拦截。</span></li>
+            <li><span class="rank">2</span><span>用 <code>git mv</code> 搬走硬过时、superseded、deferred 三类文档，让 active 先恢复自洽。</span></li>
+            <li><span class="rank">3</span><span>给 <code>docs/preview/</code> 加 archive 说明，避免旧 preview.5 文档被误当当前测试入口。</span></li>
+            <li><span class="rank">4</span><span>最后再收紧 docs drift：只检查文件顶部结构化 banner，不全文 grep <code>Superseded</code> / <code>本轮暂缓</code>。</span></li>
+          </ol>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

@@ -6,6 +6,12 @@ const EXEC_PLANS_DIR = path.join(REPO_ROOT, 'docs', 'exec-plans');
 const README_PATH = path.join(EXEC_PLANS_DIR, 'README.md');
 const ACTIVE_DIR = path.join(EXEC_PLANS_DIR, 'active');
 const COMPLETED_DIR = path.join(EXEC_PLANS_DIR, 'completed');
+// Archive buckets (document-system-governance). Phase 1 only teaches the linter
+// to RECOGNIZE these dirs (link resolution + index sync + table shape); the
+// structured top-banner rule that forbids superseded/deferred markers in active/
+// is added later (Phase 4), after files are moved, to avoid a must-fail window.
+const DEFERRED_DIR = path.join(EXEC_PLANS_DIR, 'deferred');
+const SUPERSEDED_DIR = path.join(EXEC_PLANS_DIR, 'superseded');
 
 // Active files that are long-running orchestrators (never archive). Completed
 // plans MAY reference these — they're stable indices, not phase work.
@@ -47,8 +53,12 @@ if (!fs.existsSync(README_PATH)) {
     const isPlanLink =
       onlyPath.startsWith('active/') ||
       onlyPath.startsWith('completed/') ||
+      onlyPath.startsWith('deferred/') ||
+      onlyPath.startsWith('superseded/') ||
       onlyPath.startsWith('./active/') ||
-      onlyPath.startsWith('./completed/');
+      onlyPath.startsWith('./completed/') ||
+      onlyPath.startsWith('./deferred/') ||
+      onlyPath.startsWith('./superseded/');
     if (!isPlanLink) continue;
     const resolved = path.resolve(EXEC_PLANS_DIR, onlyPath);
     if (!fs.existsSync(resolved)) {
@@ -78,6 +88,20 @@ if (!fs.existsSync(README_PATH)) {
       errors.push(
         `Completed file not indexed: docs/exec-plans/completed/${name} exists but is not linked anywhere in README.md`,
       );
+    }
+  }
+
+  // Archive buckets must be indexed too (README.md per-dir excluded).
+  for (const [dir, label] of [[DEFERRED_DIR, 'deferred'], [SUPERSEDED_DIR, 'superseded']]) {
+    const files = listMd(dir).filter((f) => f !== 'README.md');
+    for (const name of files) {
+      const patterns = [`${label}/${name}`, `./${label}/${name}`];
+      const found = patterns.some((p) => readme.includes(`(${p})`));
+      if (!found) {
+        errors.push(
+          `${label} file not indexed: docs/exec-plans/${label}/${name} exists but is not linked anywhere in README.md`,
+        );
+      }
     }
   }
 }
@@ -111,7 +135,7 @@ if (fs.existsSync(COMPLETED_DIR)) {
 // single, well-formed 3-column row.
 if (fs.existsSync(README_PATH)) {
   const lines = fs.readFileSync(README_PATH, 'utf8').split('\n');
-  const planLinkRe = /\]\((?:\.\/)?(?:active|completed)\//;
+  const planLinkRe = /\]\((?:\.\/)?(?:active|completed|deferred|superseded)\//;
   lines.forEach((line, idx) => {
     if (!line.trimStart().startsWith('|')) return; // table rows only
     if (!planLinkRe.test(line)) return; // rows that link to a plan only
