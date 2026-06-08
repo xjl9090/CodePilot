@@ -268,6 +268,14 @@
   - Stop 后 `collectStreamResponse`、session lock、runtime status 是否在 terminal/interrupted 路径完成收口；即使上游没有 terminal event，也要有精确 lockId 的 bounded cleanup。
 - **下一步:** Claude Code 按计划 P1-P3 修复并补 guardrail：route fan-out、Codex abort signal/race、精确 lockId watchdog；P5/P6 只在 P1-P3 smoke 后仍有状态分裂/no-output 时展开。
 
+#### B-025 主日志 12G 暴涨与 Codex Runtime 闪退
+- **计划:** [log-bloat-codex-runtime-crash.md](log-bloat-codex-runtime-crash.md)
+- **状态:** 🔴 日志暴涨已确认；闪退高相关待 live 复现（2026-06-08 用户提供 12G `codepilot-main` 日志）
+- **现象:** 用户另一台电脑 `codepilot-main` 日志达到约 12.5G；Codex Runtime 下客户端偶发闪退，最近一次疑似发生在突破沙盒权限、需要网络授权/搜索文件时。
+- **本地核实:** 用户日志尾部 50MB 中约 70,000 行里 69,253 行是 Codex app-server `codex_core::tasks` enter/exit tracing；`electron/main.ts` 明确没有 size-based rotation；`src/lib/codex/app-server-manager.ts` 默认 `RUST_LOG=info`；Electron 主进程把 server stdout/stderr 写入持久日志，并且 `serverErrors.push(msg)` 无界累积。
+- **影响:** 日志暴涨会吃磁盘；无界 `serverErrors` 会把同一批 tracing 噪声留在主进程内存里，是 Codex Runtime 闪退/卡死的高置信候选根因。当前日志没有 `panic` / OOM / uncaught 栈，仍需 live smoke 和 crash breadcrumb 定案。
+- **下一步:** Claude Code 优先修 P0 logging 上限：主日志 size rotation、`serverErrors` ring buffer、Codex tracing 默认降级/过滤；随后补 `render-process-gone` / `child-process-gone` / uncaught breadcrumb，并跑真实 Codex `require_escalated` / network approval smoke。
+
 ---
 
 #### B-018 macOS 启动 / 新对话时弹 "找不到用于储存 'apple' 的钥匙串" 对话框

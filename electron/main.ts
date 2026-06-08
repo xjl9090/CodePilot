@@ -27,6 +27,16 @@ import os from 'os';
 import { TerminalManager } from './terminal-manager';
 import { sanitizeLogLine } from './log-sanitize';
 import { getTrayMenuLabels } from '../src/lib/tray-menu-labels';
+import { BoundedLineRing } from '../src/lib/logging/bounded-line-ring';
+import { createRotatingLogWriter, type RotatingLogWriter } from '../src/lib/logging/main-log-rotation';
+
+// B-025: hard caps for the persistent main log + the in-memory server-output
+// ring. The 12.5 GB log a user hit came from an unbounded active file plus an
+// unbounded `serverErrors` array under a Codex app-server tracing flood.
+const MAIN_LOG_MAX_BYTES = 50 * 1024 * 1024; // rotate the active log past 50 MB
+const MAIN_LOG_MAX_ARCHIVES = 5;             // keep .1 .. .5 (≈300 MB ceiling)
+const SERVER_ERRORS_MAX_LINES = 200;
+const SERVER_ERRORS_MAX_BYTES = 256 * 1024;
 
 /**
  * Return a copy of process.env without __NEXT_PRIVATE_* variables.
@@ -50,7 +60,11 @@ function sanitizedProcessEnv(): Record<string, string> {
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: Electron.UtilityProcess | null = null;
 let serverPort: number | null = null;
-let serverErrors: string[] = [];
+const serverErrors = new BoundedLineRing(SERVER_ERRORS_MAX_LINES, SERVER_ERRORS_MAX_BYTES);
+// B-025: set by setupPersistentMainLog so the crash breadcrumb can report the
+// active-log size and the writer can be flushed on quit.
+let mainLogWriter: RotatingLogWriter | null = null;
+let activeMainLogPath: string | null = null;
 let serverExited = false;
 let serverExitCode: number | null = null;
 let userShellEnv: Record<string, string> = {};
@@ -801,7 +815,7 @@ async function waitForServer(port: number, timeout = 30000): Promise<void> {
     // If the server process already exited, fail fast
     if (serverExited) {
       throw new Error(
-        `Server process exited with code ${serverExitCode}.\n\n${serverErrors.join('\n')}`
+        `Server process exited with code ${serverExitCode}.\n\n${serverErrors.toArray().join('\n')}`
       );
     }
     try {
@@ -833,7 +847,7 @@ async function waitForServer(port: number, timeout = 30000): Promise<void> {
     }
   }
   throw new Error(
-    `Server startup timeout after ${timeout / 1000}s.\n\nLast health-check error: ${lastError}\n\n${serverErrors.length > 0 ? 'Server output:\n' + serverErrors.slice(-10).join('\n') : 'No server output captured.'}`
+    `Server startup timeout after ${timeout / 1000}s.\n\nLast health-check error: ${lastError}\n\n${serverErrors.length > 0 ? 'Server output:\n' + serverErrors.recent(10).join('\n') : 'No server output captured.'}`
   );
 }
 
@@ -844,7 +858,7 @@ function startServer(port: number): Electron.UtilityProcess {
   console.log(`Server path: ${serverPath}`);
   console.log(`Standalone dir: ${standaloneDir}`);
 
-  serverErrors = [];
+  serverErrors.clear();
   serverExited = false;
   serverExitCode = null;
 
@@ -1323,11 +1337,20 @@ function setupPersistentMainLog() {
     const sanitizedFallbackFile = path.join(logsDir, 'codepilot-main-sanitized.log');
     const activeLogFile = rotationCompleted ? logFile : sanitizedFallbackFile;
 
-    const stream = fs.createWriteStream(activeLogFile, { flags: 'a' });
+    // B-025: rotate the active file past MAIN_LOG_MAX_BYTES (keeping a small
+    // ring of archives) instead of appending forever. The writer also rotates a
+    // leftover over-cap file (the 12 GB case) before this session's first write.
+    const logWriter = createRotatingLogWriter({
+      activeLogFile,
+      maxBytes: MAIN_LOG_MAX_BYTES,
+      maxArchives: MAIN_LOG_MAX_ARCHIVES,
+    });
+    mainLogWriter = logWriter;
+    activeMainLogPath = activeLogFile;
     const sessionMarker = rotationCompleted
       ? `\n=== session start ${new Date().toISOString()} (sanitized) ===\n`
       : `\n=== session start ${new Date().toISOString()} (sanitized — fallback file; rotation pending) ===\n`;
-    stream.write(sessionMarker);
+    logWriter.write(sessionMarker);
 
     const origLog = console.log.bind(console);
     const origWarn = console.warn.bind(console);
@@ -1352,9 +1375,9 @@ function setupPersistentMainLog() {
       return `${ts} [${level}] ${sanitized}\n`;
     };
 
-    console.log = (...args: unknown[]) => { stream.write(fmt('log', args)); origLog(...args); };
-    console.warn = (...args: unknown[]) => { stream.write(fmt('warn', args)); origWarn(...args); };
-    console.error = (...args: unknown[]) => { stream.write(fmt('error', args)); origError(...args); };
+    console.log = (...args: unknown[]) => { logWriter.write(fmt('log', args)); origLog(...args); };
+    console.warn = (...args: unknown[]) => { logWriter.write(fmt('warn', args)); origWarn(...args); };
+    console.error = (...args: unknown[]) => { logWriter.write(fmt('error', args)); origError(...args); };
   } catch (err) {
     // Logging is best-effort — don't block app startup if disk is full / readonly.
 
@@ -1384,6 +1407,66 @@ if (!gotSingleInstanceLock) {
   });
 }
 
+// B-025 P1 — crash/exit breadcrumb. Writes a typed size/memory summary through
+// the rotating writer (a synchronous fd, so it lands on disk before an imminent
+// exit AND honors rotation + byte accounting); falls back to a direct sync
+// append only if the writer isn't up yet (a crash during early startup). Never
+// logs full command / path / API key — a typed summary that still runs through
+// sanitizeLogLine.
+function logCrashBreadcrumb(kind: string, detail: Record<string, unknown> = {}): void {
+  try {
+    let activeLogBytes: number | null = null;
+    try {
+      if (activeMainLogPath && fs.existsSync(activeMainLogPath)) {
+        activeLogBytes = fs.statSync(activeMainLogPath).size;
+      }
+    } catch { /* ignore */ }
+    const mem = process.memoryUsage();
+    const payload = {
+      kind,
+      ...detail,
+      activeLogBytes,
+      writerBytes: mainLogWriter?.currentBytes() ?? null,
+      serverErrorsLines: serverErrors.length,
+      serverErrorsBytes: serverErrors.byteLength,
+      rssBytes: mem.rss,
+      heapUsedBytes: mem.heapUsed,
+    };
+    const line = `${new Date().toISOString()} [crash] ${sanitizeLogLine('[crash-breadcrumb] ' + JSON.stringify(payload))}\n`;
+    // Prefer the rotating writer (synchronous fd — rotation + byte-accounting
+    // aware); fall back to a direct synchronous append only if it isn't set up.
+    if (mainLogWriter) {
+      mainLogWriter.write(line);
+    } else if (activeMainLogPath) {
+      try { fs.appendFileSync(activeMainLogPath, line); } catch { /* best-effort */ }
+    }
+    try { process.stderr.write(line); } catch { /* best-effort */ }
+  } catch { /* a breadcrumb must never throw */ }
+}
+
+function registerCrashBreadcrumbs(): void {
+  // READ-ONLY breadcrumbs — they must NOT change crash/exit semantics (B-025
+  // review). A plain `uncaughtException` listener SUPPRESSES Node's default
+  // fatal exit, turning a crash into a zombie main process stuck in a corrupt
+  // state — the exact failure mode we want to diagnose, not introduce. So we
+  // use `uncaughtExceptionMonitor`, which runs purely for observation and leaves
+  // the default fatal handling (and Sentry's handler) untouched.
+  process.on('uncaughtExceptionMonitor', (err) => {
+    logCrashBreadcrumb('uncaughtException', { name: err?.name, message: String(err?.message ?? '').slice(0, 200) });
+  });
+  // Deliberately NO plain `unhandledRejection` listener: adding one would
+  // suppress the process's default unhandled-rejection policy. In Node's 'throw'
+  // mode an unhandled rejection escalates to an uncaughtException — already
+  // recorded by the monitor above; in 'warn' mode it isn't a crash. Either way
+  // the existing policy stays intact.
+  app.on('child-process-gone', (_event, details) => {
+    logCrashBreadcrumb('child-process-gone', { type: details.type, reason: details.reason, exitCode: details.exitCode });
+  });
+  app.on('render-process-gone', (_event, _webContents, details) => {
+    logCrashBreadcrumb('render-process-gone', { reason: details.reason, exitCode: details.exitCode });
+  });
+}
+
 app.whenReady().then(async () => {
   // A losing second instance is on its way out via app.quit() above — don't
   // initialize tray/server/windows in it.
@@ -1392,6 +1475,11 @@ app.whenReady().then(async () => {
   // Set up persistent main-process log first so subsequent startup
   // logs (env load, ABI check, server boot) are captured.
   setupPersistentMainLog();
+
+  // B-025: register crash/exit breadcrumbs now that the log writer + active-log
+  // path exist, so the next crash near the Codex approval path leaves size /
+  // memory evidence instead of vanishing.
+  registerCrashBreadcrumbs();
 
   // Load user's full shell environment (API keys, PATH, etc.)
   userShellEnv = loadUserShellEnv();

@@ -22,6 +22,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { CodexAppServerClient, type CodexTransport } from './app-server-client';
 import type { CodexAvailability } from './types';
+import { shouldDropCodexTraceLine, resolveCodexRustLog } from './codex-trace-filter';
 
 interface SpawnedTransport extends CodexTransport {
   readonly proc: ChildProcessWithoutNullStreams;
@@ -102,7 +103,14 @@ function makeStdioTransport(proc: ChildProcessWithoutNullStreams): SpawnedTransp
   proc.stderr.setEncoding('utf8');
   proc.stderr.on('data', (chunk: string) => {
     for (const line of chunk.split(/\r?\n/)) {
-      if (line.trim()) console.debug('[codex.app-server]', line);
+      // B-025: drop the high-frequency INFO span flood (codex_core::tasks /
+      // session::handlers enter/exit) from the tee by default — it otherwise
+      // streams into the persistent main log via the server's stdout. Warn /
+      // error / fatal lines are never dropped (see shouldDropCodexTraceLine),
+      // and the fatal-config fail-fast below runs on the full chunk regardless.
+      if (line.trim() && !shouldDropCodexTraceLine(line)) {
+        console.debug('[codex.app-server]', line);
+      }
     }
     // P0.2 — fatal config error on stderr: fail NOW + kill the child so a
     // lingering old binary can't hold the RPC open for its ~30s timeout.
@@ -416,9 +424,11 @@ export async function getCodexAppServer(): Promise<ManagedAppServer> {
         windowsVerbatimArguments: launch.windowsVerbatimArguments,
         env: {
           ...process.env,
-          // Surface tracing logs at info level by default; operator
-          // can override with RUST_LOG in their environment.
-          RUST_LOG: process.env.RUST_LOG ?? 'info',
+          // B-025: default to 'warn' to avoid the Codex INFO tracing flood
+          // (codex_core::tasks enter/exit spans) bloating the persistent main
+          // log + main-process memory. Explicit RUST_LOG wins; opt into full
+          // 'info' tracing with CODEPILOT_CODEX_TRACE=1.
+          RUST_LOG: resolveCodexRustLog(process.env),
         },
       });
     } catch (err) {
