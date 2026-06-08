@@ -104,6 +104,7 @@
 | [active/codex-stop-recovery.md](active/codex-stop-recovery.md) | **Codex Stop Recovery / 终止后恢复发送**：调研并修复 Codex Runtime 下 Stop 只切断前端 stream、未必调用 Codex app-server `turn/interrupt`，导致后台 collect / session lock / runtime status 未收口，下一条同会话指令无法拉起的问题；外部 Codex issues 只作症状旁证，不采信其根因推测 | 📋 待 Claude Code 接手修复 |
 | [active/development-harness-optimization.md](active/development-harness-optimization.md) | **开发流程 Harness 优化讨论稿（v2）**：Codex 初稿 + ClaudeCode 按用户"可审核"约束重组。事实层面补 3 项 Codex 漏说的已有资产（guardrails/ 4 份模块契约 / lint:colors / tech-debt-tracker）；方向上 Skill 化暂缓、主推自动检查脚本（docs drift / hook 配置）+ 测试矩阵补洞；每个 Step 必须以"用户能看到什么 / 不做什么 / 怎么验收"开头 | 📋 讨论中；待用户对齐 Step 1-3，再决定是否进入 Step 4-6 |
 | [active/issue-tracker.md](active/issue-tracker.md) | **统一问题跟踪**：所有 Bug / Feature Request / Sentry 监控的活动看板 | 持续维护 |
+| [active/post-0.55.1-issue-triage.md](active/post-0.55.1-issue-triage.md) | **0.55.1 后 Issues 调研与 Claude Code 接手优先级**：核对 #606/#612/#613/#614/#615/#616/#617/#618/#619/#620/#621 以及 #554/#577；确认 MiMo 回退已随 0.55 修复，当前重点为截图被吞、Ollama 误要求 Claude Code、Codex/Opus 模型列表不稳定、概率串会话 | 📋 待 Claude Code 按 P0/P1 接手 |
 
 ### Superseded（被接管，历史参考）— `superseded/`
 
