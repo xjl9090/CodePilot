@@ -26,7 +26,7 @@ export async function register() {
         const fs = await import('fs');
         const path = await import('path');
         const os = await import('os');
-        const markerPath = path.join(os.homedir(), '.codepilot', 'sentry-disabled');
+        const markerPath = path.join(os.homedir(), '.xjlpilot', 'sentry-disabled');
         const optedOut = fs.existsSync(markerPath) && fs.readFileSync(markerPath, 'utf-8').trim() === 'true';
         if (!optedOut) {
           const Sentry = await import('@sentry/node');

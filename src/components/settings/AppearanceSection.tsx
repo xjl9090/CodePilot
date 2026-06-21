@@ -21,6 +21,13 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SettingsCard } from "@/components/patterns/SettingsCard";
 import { FieldRow } from "@/components/patterns/FieldRow";
+import {
+  FONT_SCALE_KEY,
+  FONT_SCALE_PERCENT,
+  FONT_SCALE_SETTING,
+  normalizeFontScale,
+  type FontScaleValue,
+} from "@/lib/font-scale";
 
 // ── Theme Mode Pill Selector ────────────────────────────────────────
 
@@ -58,6 +65,57 @@ function ThemeModePills({
             )}
           >
             <CodePilotIcon name={opt.icon} size="sm" aria-hidden />
+            {t(opt.labelKey)}
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Font Size Pill Selector ─────────────────────────────────────────
+
+const FONT_SIZE_OPTIONS: ReadonlyArray<{
+  value: FontScaleValue;
+  labelKey:
+    | "settings.fontSizeCompact"
+    | "settings.fontSizeDefault"
+    | "settings.fontSizeLarge"
+    | "settings.fontSizeXLarge";
+}> = [
+  { value: "compact", labelKey: "settings.fontSizeCompact" },
+  { value: "default", labelKey: "settings.fontSizeDefault" },
+  { value: "large", labelKey: "settings.fontSizeLarge" },
+  { value: "xlarge", labelKey: "settings.fontSizeXLarge" },
+] as const;
+
+function FontSizePills({
+  value,
+  onChange,
+}: {
+  value: FontScaleValue;
+  onChange: (v: FontScaleValue) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center rounded-lg border border-border/50 p-1 gap-1" role="radiogroup">
+      {FONT_SIZE_OPTIONS.map((opt) => {
+        const selected = value === opt.value;
+        return (
+          <Button
+            key={opt.value}
+            variant="ghost"
+            size="sm"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onChange(opt.value)}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-xs font-medium transition-all h-auto",
+              selected
+                ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary hover:text-primary-foreground"
+                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            )}
+          >
             {t(opt.labelKey)}
           </Button>
         );
@@ -150,6 +208,15 @@ export function AppearanceSection() {
   const { t } = useTranslation();
   const isDark = resolvedTheme === "dark";
 
+  // Font scale: hydration-safe — initial render uses 'default' so SSR + first
+  // client paint agree, then on mount we read the real value from localStorage
+  // (already populated by the anti-FOUC <head> script in layout.tsx).
+  const [fontScale, setFontScaleState] = useState<FontScaleValue>("default");
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setFontScaleState(normalizeFontScale(localStorage.getItem(FONT_SCALE_KEY)));
+  }, []);
+
   const setTheme = useCallback((mode: string) => {
     setThemeRaw(mode);
     persistThemeSetting('theme_mode', mode);
@@ -159,6 +226,20 @@ export function AppearanceSection() {
     setFamilyRaw(id);
     persistThemeSetting('theme_family', id);
   }, [setFamilyRaw]);
+
+  const setFontScale = useCallback((value: FontScaleValue) => {
+    setFontScaleState(value);
+    // Live apply: scale <html> font-size immediately so the page reflows
+    // without a reload. The next-mount script in layout.tsx will read the
+    // same value back from localStorage on next launch.
+    if (typeof document !== "undefined") {
+      document.documentElement.style.fontSize = FONT_SCALE_PERCENT[value];
+    }
+    if (typeof window !== "undefined") {
+      try { localStorage.setItem(FONT_SCALE_KEY, value); } catch { /* quota */ }
+    }
+    persistThemeSetting(FONT_SCALE_SETTING, value);
+  }, []);
 
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -227,6 +308,15 @@ export function AppearanceSection() {
             ))}
           </SelectContent>
         </Select>
+      </FieldRow>
+
+      {/* Font size */}
+      <FieldRow
+        label={t("settings.fontSize")}
+        description={t("settings.fontSizeDesc")}
+        separator
+      >
+        <FontSizePills value={fontScale} onChange={setFontScale} />
       </FieldRow>
 
       {/* Preview */}

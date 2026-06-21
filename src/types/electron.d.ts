@@ -60,6 +60,23 @@ interface ElectronTerminalAPI {
   onExit: (callback: (data: { id: string; code: number }) => void) => () => void;
 }
 
+// Desktop pet bridge — see docs/exec-plans/active/desktop-pet.md.
+type ElectronPetState = 'idle' | 'working' | 'waiting' | 'done';
+interface ElectronPetStatePayload {
+  state: ElectronPetState;
+  themeId: string | null;
+  assetUrl: { idle: string; working: string; waiting: string; done: string } | null;
+  muted: boolean;
+}
+interface ElectronPetAPI {
+  getSettings: () => Promise<Record<string, string>>;
+  setEnabled: (enabled: boolean) => Promise<{ ok: boolean }>;
+  toggleMute: () => Promise<{ muted: boolean }>;
+  resetPosition: () => Promise<{ x: number; y: number }>;
+  getAssetBaseDir: () => Promise<string>;
+  onState: (cb: (payload: ElectronPetStatePayload) => void) => () => void;
+}
+
 interface ElectronAPI {
   versions: {
     electron: string;
@@ -95,6 +112,7 @@ interface ElectronAPI {
     resolve: (url: string) => Promise<string>;
   };
   terminal?: ElectronTerminalAPI;
+  pet?: ElectronPetAPI;
   notification?: {
     /**
      * Phase 3 Step 3: payload extended with task / session / event IDs

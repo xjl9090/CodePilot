@@ -204,6 +204,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
+  // Desktop pet has its own BrowserWindow with NO chrome. We compute the
+  // bypass condition here but apply it AFTER all hooks below, to satisfy
+  // the rules of hooks (early return before hooks would be a violation).
+  // See docs/exec-plans/active/desktop-pet.md §9.
+  const isPetRoute = pathname === '/pet' || pathname.startsWith('/pet/');
+
   const [chatListOpenRaw, setChatListOpenRaw] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupInitialCard, setSetupInitialCard] = useState<'claude' | 'provider' | 'project' | undefined>();
@@ -303,6 +309,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener('open-global-search', handler);
     return () => window.removeEventListener('open-global-search', handler);
   }, []);
+
+  // CodePet companion: external menu click → jump to a chat session. The
+  // Electron main process drains ~/.codepilot/jump-to.txt and dispatches this
+  // event with the target session id; we route the in-app router to it.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { sessionId?: string } | undefined;
+      const sid = detail?.sessionId;
+      if (!sid) return;
+      router.push(`/chat/${sid}`);
+    };
+    window.addEventListener('codepet:jump-to-session', handler);
+    return () => window.removeEventListener('codepet:jump-to-session', handler);
+  }, [router]);
 
   // Sync with viewport after hydration to avoid SSR mismatch
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -682,6 +702,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 
   const batchImageGenValue = useBatchImageGenState();
+
+  // Pet route: skip all of AppShell's chrome / providers / panels and just
+  // render the page. Pet window is a separate BrowserWindow with its own
+  // tiny preload bridge and intentionally NO React contexts from the main
+  // shell.
+  if (isPetRoute) return <>{children}</>;
 
   return (
     <UpdateContext.Provider value={updateContextValue}>

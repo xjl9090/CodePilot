@@ -23,6 +23,7 @@ export type SettingsSection =
   | "overview"
   | "general"
   | "appearance"
+  | "pet"
   | "providers"
   | "models"
   | "runtime"
@@ -54,6 +55,8 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { id: "overview", label: "Overview", icon: "overview", href: "/settings/overview", i18nKey: "settings.overview" as TranslationKey },
   { id: "general", label: "General", icon: "settings", href: "/settings/general", i18nKey: "settings.general" as TranslationKey },
   { id: "appearance", label: "Appearance", icon: "appearance", href: "/settings/appearance", i18nKey: "settings.appearance" as TranslationKey },
+  // Desktop pet — see docs/exec-plans/active/desktop-pet.md.
+  { id: "pet", label: "Pet", icon: "assistant", href: "/settings/pet", i18nKey: "settings.pet" as TranslationKey },
   { id: "providers", label: "Providers", icon: "provider", href: "/settings/providers", i18nKey: "settings.providers" as TranslationKey },
   { id: "models", label: "Models", icon: "model", href: "/settings/models", i18nKey: "settings.models" as TranslationKey },
   { id: "runtime", label: "Runtime", icon: "runtime", href: "/settings/runtime", i18nKey: "settings.runtime" as TranslationKey },

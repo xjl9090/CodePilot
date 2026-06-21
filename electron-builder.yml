@@ -1,5 +1,5 @@
-appId: com.codepilot.app
-productName: CodePilot
+appId: com.xjlpilot.app
+productName: xjlPilot
 publish:
   provider: github
   owner: op7418
@@ -81,7 +81,7 @@ linux:
   artifactName: "${productName}-${version}-${arch}.${ext}"
   desktop:
     entry:
-      Name: CodePilot
+      Name: xjlPilot
       Comment: A native desktop GUI for Claude Code
       Categories: Development;IDE;
       StartupWMClass: codepilot

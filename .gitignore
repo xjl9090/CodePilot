@@ -78,3 +78,7 @@ skills-lock.json
 # Codex Runtime reference material — clone locally per Phase 5 plan
 # (git clone --depth 1 https://github.com/openai/codex.git 资料/codex)
 资料/codex/
+
+# Local sed backups — never commit
+*.bak
+*.bak-*

@@ -6,7 +6,7 @@ import { join } from 'path';
 // Check opt-out before init — reads a marker file that the renderer writes
 const sentryOptOutPath = join(
   process.env.HOME || process.env.USERPROFILE || '',
-  '.codepilot',
+  '.xjlpilot',
   'sentry-disabled',
 );
 const sentryDisabled = existsSync(sentryOptOutPath) &&
@@ -874,7 +874,7 @@ function startServer(port: number): Electron.UtilityProcess {
     ...(!userShellEnv.HTTP_PROXY && !userShellEnv.HTTPS_PROXY ? resolvedProxyEnv : {}),
     PORT: String(port),
     HOSTNAME: '127.0.0.1',
-    CLAUDE_GUI_DATA_DIR: path.join(home, '.codepilot'),
+    CLAUDE_GUI_DATA_DIR: path.join(home, '.xjlpilot'),
     HOME: home,
     USERPROFILE: home,
     PATH: constructedPath,
@@ -1079,6 +1079,49 @@ function createWindow(url?: string) {
 
   mainWindow.loadURL(url || LOADING_HTML);
 
+  // CodePet jump-to-session watcher. When an external companion app (CodePet)
+  // wants to surface a specific chat session here, it writes the session id to
+  // `~/.codepilot/jump-to.txt`. We watch that file, drain it, and forward the
+  // id to the renderer as a CustomEvent — AppShell listens and router.pushes
+  // to /chat/<id>. No deep-link / URL scheme needed, no preload changes.
+  try {
+    const jumpDir = path.join(os.homedir(), '.codepilot');
+    const jumpFile = path.join(jumpDir, 'jump-to.txt');
+    if (!fs.existsSync(jumpDir)) fs.mkdirSync(jumpDir, { recursive: true });
+    if (!fs.existsSync(jumpFile)) fs.writeFileSync(jumpFile, '');
+    const drainAndDispatch = () => {
+      try {
+        const raw = fs.readFileSync(jumpFile, 'utf-8').trim();
+        if (!raw) return;
+        // Validate: must look like a hex/uuid id (no shell metacharacters).
+        const sid = raw.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+        // Clear immediately so a second click on the same id still triggers.
+        try { fs.writeFileSync(jumpFile, ''); } catch { /* ignore */ }
+        if (!sid) return;
+        const escaped = JSON.stringify(sid);
+        // Try the AppShell CustomEvent path first; fall back to location.href
+        // so this works even on builds where AppShell hasn't been rebuilt with
+        // the matching listener.
+        mainWindow?.webContents.executeJavaScript(`
+          (() => {
+            const sid = ${escaped};
+            const before = window.location.pathname;
+            window.dispatchEvent(new CustomEvent('codepet:jump-to-session', { detail: { sessionId: sid } }));
+            setTimeout(() => {
+              if (!window.location.pathname.includes(sid)) {
+                window.location.href = '/chat/' + sid;
+              }
+            }, 250);
+          })();
+        `).catch(() => { /* renderer may be mid-reload */ });
+      } catch { /* ignore */ }
+    };
+    // fs.watch fires "change" on writes; we re-read each time.
+    fs.watch(jumpFile, { persistent: false }, () => drainAndDispatch());
+    // Also drain at startup in case CodePet wrote before this window loaded.
+    mainWindow.webContents.on('did-finish-load', drainAndDispatch);
+  } catch { /* watcher is best-effort */ }
+
   // Codex round 3 + Electron issue #20357 fix — re-apply
   // setBackgroundColor / setVibrancy AFTER loadURL. loadURL resets
   // the chromium compositor's backing colour to opaque (this is
@@ -1223,8 +1266,322 @@ function createWindow(url?: string) {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // Pet window's lifecycle is bound to the main window — see desktop-pet plan
+    // §8.3 ("主窗口关闭 → 宠物窗口跟着关").
+    destroyPetWindow();
   });
 }
+
+// =====================================================================
+// Desktop pet window — see docs/exec-plans/active/desktop-pet.md
+//
+// One frameless / transparent / always-on-top window. Optional;
+// pet_settings.enabled gates creation. State is pushed by petStateTicker
+// every 2s via 'pet:state' on petWindow.webContents (NOT mainWindow).
+//
+// Why we go through HTTP instead of importing db.ts directly:
+//   better-sqlite3's native .node binding is compiled for Node ABI at
+//   `npm install` time. Next dev server (plain Node) uses it fine, but
+//   the Electron main process runs a different ABI. electron-rebuild
+//   only runs in scripts/after-pack.js at package time. In dev, we'd
+//   crash on `require('better-sqlite3')` here. Routing through
+//   /api/pet/* keeps all DB access on the Next side.
+// =====================================================================
+
+let petWindow: BrowserWindow | null = null;
+let petStateTimer: NodeJS.Timeout | null = null;
+// done state must persist for 5s after work ends (plan §3) so users can
+// actually see the celebration. We track the last-known logical state and
+// when it transitioned, then short-circuit transitions out of 'done' until
+// the dwell window passes.
+let lastPetState: 'idle' | 'working' | 'waiting' | 'done' = 'idle';
+let doneEnteredAt = 0;
+const DONE_DWELL_MS = 5_000;
+
+function petAssetsBaseDir(): string {
+  const root = process.env.CLAUDE_GUI_DATA_DIR || path.join(os.homedir(), '.xjlpilot');
+  return path.join(root, 'pet');
+}
+
+function petAssetUrlForState(themeId: string, state: string): string | null {
+  if (serverPort == null) return null;
+  return `http://127.0.0.1:${serverPort}/api/pet/asset?theme=${encodeURIComponent(themeId)}&state=${encodeURIComponent(state)}&t=${Date.now()}`;
+}
+
+interface PetSnapshot {
+  raw?: 'idle' | 'working' | 'waiting';
+  currentThemeId?: string | null;
+  muted?: boolean;
+  enabled?: boolean;
+  error?: string;
+}
+
+async function fetchPetSnapshot(): Promise<PetSnapshot | null> {
+  if (serverPort == null) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const http = require('http') as typeof import('http');
+    return await new Promise<PetSnapshot | null>((resolve) => {
+      const req = http.get(
+        `http://127.0.0.1:${serverPort}/api/pet/state-snapshot`,
+        { timeout: 1500 },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (c: Buffer) => chunks.push(c));
+          res.on('end', () => {
+            try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf-8'))); }
+            catch { resolve(null); }
+          });
+        },
+      );
+      req.on('error', () => resolve(null));
+      req.on('timeout', () => { req.destroy(); resolve(null); });
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function fetchPetSettings(): Promise<Record<string, string>> {
+  if (serverPort == null) return {};
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const http = require('http') as typeof import('http');
+    return await new Promise<Record<string, string>>((resolve) => {
+      const req = http.get(
+        `http://127.0.0.1:${serverPort}/api/pet/settings`,
+        { timeout: 1500 },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (c: Buffer) => chunks.push(c));
+          res.on('end', () => {
+            try {
+              const json = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+              resolve(json.settings || {});
+            } catch { resolve({}); }
+          });
+        },
+      );
+      req.on('error', () => resolve({}));
+      req.on('timeout', () => { req.destroy(); resolve({}); });
+    });
+  } catch {
+    return {};
+  }
+}
+
+async function putPetSettings(patch: Record<string, string>): Promise<void> {
+  if (serverPort == null) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const http = require('http') as typeof import('http');
+    const body = JSON.stringify({ settings: patch });
+    await new Promise<void>((resolve) => {
+      const req = http.request(
+        {
+          hostname: '127.0.0.1',
+          port: serverPort!,
+          path: '/api/pet/settings',
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+          timeout: 1500,
+        },
+        (res) => { res.on('data', () => {}); res.on('end', () => resolve()); },
+      );
+      req.on('error', () => resolve());
+      req.on('timeout', () => { req.destroy(); resolve(); });
+      req.write(body);
+      req.end();
+    });
+  } catch { /* swallow */ }
+}
+
+async function buildPetStatePayload(state: 'idle' | 'working' | 'waiting' | 'done'): Promise<{
+  state: 'idle' | 'working' | 'waiting' | 'done';
+  themeId: string | null;
+  assetUrl: { idle: string | null; working: string | null; waiting: string | null; done: string | null } | null;
+  muted: boolean;
+}> {
+  const snap = await fetchPetSnapshot();
+  const themeId = snap?.currentThemeId || null;
+  const muted = !!snap?.muted;
+  const assetUrl = themeId
+    ? {
+        idle: petAssetUrlForState(themeId, 'idle'),
+        working: petAssetUrlForState(themeId, 'working'),
+        waiting: petAssetUrlForState(themeId, 'waiting'),
+        done: petAssetUrlForState(themeId, 'done'),
+      }
+    : null;
+  return { state, themeId, assetUrl, muted };
+}
+
+async function inferPetState(): Promise<'idle' | 'working' | 'waiting' | 'done'> {
+  const snap = await fetchPetSnapshot();
+  const raw: 'idle' | 'working' | 'waiting' = snap?.raw || 'idle';
+  const now = Date.now();
+  if (lastPetState === 'done' && now - doneEnteredAt < DONE_DWELL_MS) return 'done';
+  if (lastPetState === 'working' && raw !== 'working') {
+    doneEnteredAt = now;
+    return 'done';
+  }
+  return raw;
+}
+
+function clampPetPositionToScreen(x: number, y: number, w: number, h: number): { x: number; y: number } {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { screen } = require('electron') as typeof import('electron');
+  const displays = screen.getAllDisplays();
+  for (const d of displays) {
+    const r = d.workArea;
+    if (x >= r.x && y >= r.y && x + w <= r.x + r.width && y + h <= r.y + r.height) {
+      return { x, y };
+    }
+  }
+  const primary = screen.getPrimaryDisplay().workArea;
+  return {
+    x: primary.x + primary.width - w - 24,
+    y: primary.y + primary.height - h - 24,
+  };
+}
+
+async function createPetWindow(): Promise<void> {
+  if (petWindow && !petWindow.isDestroyed()) return;
+  if (serverPort == null) return;
+
+  const settings = await fetchPetSettings();
+  // Pet window size (was 220x220 before the speech-bubble pass) —
+  // 260x260 leaves headroom above the pet for a bubble + tail without
+  // clipping. The pet image itself is still rendered at 160x160.
+  const W = 260;
+  const H = 260;
+  const savedX = parseInt(settings.pos_x || '', 10);
+  const savedY = parseInt(settings.pos_y || '', 10);
+  let pos: { x: number; y: number };
+  if (Number.isFinite(savedX) && Number.isFinite(savedY)) {
+    pos = clampPetPositionToScreen(savedX, savedY, W, H);
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { screen } = require('electron') as typeof import('electron');
+    const r = screen.getPrimaryDisplay().workArea;
+    pos = { x: r.x + r.width - W - 24, y: r.y + r.height - H - 24 };
+  }
+
+  petWindow = new BrowserWindow({
+    width: W,
+    height: H,
+    x: pos.x,
+    y: pos.y,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00ffffff',
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    hasShadow: false,
+    focusable: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  petWindow.setAlwaysOnTop(true, 'floating');
+  petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
+  petWindow.loadURL(`http://127.0.0.1:${serverPort}/pet`);
+
+  petWindow.on('closed', () => {
+    petWindow = null;
+    if (petStateTimer) {
+      clearInterval(petStateTimer);
+      petStateTimer = null;
+    }
+  });
+
+  petWindow.on('move', () => {
+    if (!petWindow || petWindow.isDestroyed()) return;
+    const [x, y] = petWindow.getPosition();
+    putPetSettings({ pos_x: String(x), pos_y: String(y) }).catch(() => {});
+  });
+
+  const pushState = async () => {
+    if (!petWindow || petWindow.isDestroyed()) return;
+    const next = await inferPetState();
+    lastPetState = next;
+    const payload = await buildPetStatePayload(next);
+    if (!petWindow || petWindow.isDestroyed()) return;
+    petWindow.webContents.send('pet:state', payload);
+  };
+
+  petStateTimer = setInterval(pushState, 2_000);
+
+  petWindow.webContents.on('did-finish-load', () => {
+    pushState().catch(() => {});
+  });
+}
+
+function destroyPetWindow(): void {
+  if (petStateTimer) {
+    clearInterval(petStateTimer);
+    petStateTimer = null;
+  }
+  if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.close();
+  }
+  petWindow = null;
+}
+
+async function setPetEnabled(enabled: boolean): Promise<void> {
+  await putPetSettings({ enabled: enabled ? '1' : '0' });
+  if (enabled) await createPetWindow();
+  else destroyPetWindow();
+}
+
+// Auto-spawn at boot if user previously enabled it. Server must be ready —
+// caller schedules this after serverPort is set. The 3s delay lets Next's
+// dev compiler lazily build /api/pet/settings before our first fetch hits it;
+// without it cold boots hit a 404.
+async function maybeAutoSpawnPet(): Promise<void> {
+  try {
+    await new Promise((r) => setTimeout(r, 3_000));
+    const settings = await fetchPetSettings();
+    if (settings.enabled === '1' && settings.current_theme_id) {
+      await createPetWindow();
+    }
+  } catch (err) {
+    console.warn('[pet] auto-spawn check failed:', err);
+  }
+}
+
+ipcMain.handle('pet:get-settings', async () => fetchPetSettings());
+ipcMain.handle('pet:set-enabled', async (_event, enabled: boolean) => {
+  await setPetEnabled(!!enabled);
+  return { ok: true };
+});
+ipcMain.handle('pet:toggle-mute', async () => {
+  const cur = await fetchPetSettings();
+  const next = cur.muted === '1' ? '0' : '1';
+  await putPetSettings({ muted: next });
+  if (petWindow && !petWindow.isDestroyed()) {
+    const payload = await buildPetStatePayload(lastPetState);
+    petWindow.webContents.send('pet:state', payload);
+  }
+  return { muted: next === '1' };
+});
+ipcMain.handle('pet:reset-position', async () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { screen } = require('electron') as typeof import('electron');
+  const W = 260, H = 260;
+  const r = screen.getPrimaryDisplay().workArea;
+  const x = r.x + r.width - W - 24;
+  const y = r.y + r.height - H - 24;
+  await putPetSettings({ pos_x: String(x), pos_y: String(y) });
+  if (petWindow && !petWindow.isDestroyed()) petWindow.setPosition(x, y);
+  return { x, y };
+});
+ipcMain.handle('pet:asset-base-dir', () => petAssetsBaseDir());
+
+export {}; // keep this block as a module-friendly section even if unused later
 
 /**
  * Phase 2C.6 + follow-ups: persistent log file for the main process.
@@ -2320,6 +2677,7 @@ app.whenReady().then(async () => {
       serverPort = port;
       createWindow(`http://127.0.0.1:${port}`);
       ensureTray();
+      maybeAutoSpawnPet().catch(() => {});
     } else {
       // Show window immediately with loading screen so user sees progress
       // even if port acquisition takes a moment.
@@ -2345,6 +2703,7 @@ app.whenReady().then(async () => {
       if (mainWindow) {
         mainWindow.loadURL(`http://127.0.0.1:${port}`);
       }
+      maybeAutoSpawnPet().catch(() => {});
 
       // Trigger bridge auto-start via explicit POST (only checks setting once)
       // eslint-disable-next-line @typescript-eslint/no-require-imports

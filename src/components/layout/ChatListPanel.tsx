@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 // ImportSessionDialog moved to Settings page
 import { SessionListItem } from "./SessionListItem";
 import { ProjectGroupHeader } from "./ProjectGroupHeader";
+import { ScheduledTasksSection } from "./ScheduledTasksSection";
 import { FolderPicker } from "@/components/chat/FolderPicker";
 import { useAssistantWorkspace } from "@/hooks/useAssistantWorkspace";
 import { AssistantPromoCard } from "@/components/chat/ChatEmptyState";
@@ -451,7 +452,7 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
           <Button
             variant="ghost"
             size="sm"
-            className="group w-full justify-start gap-2 h-9 px-3 rounded-xl text-[13px] font-normal text-sidebar-foreground"
+            className="group w-full justify-start gap-2 h-9 px-3 rounded-xl text-[17px] font-medium text-sidebar-foreground"
             disabled={creatingChat}
             onClick={handleNewChat}
           >
@@ -463,7 +464,7 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
           <Button
             variant="ghost"
             size="sm"
-            className="group w-full justify-start gap-2 h-9 px-3 rounded-xl text-[13px] font-normal text-sidebar-foreground"
+            className="group w-full justify-start gap-2 h-9 px-3 rounded-xl text-[17px] font-medium text-sidebar-foreground"
             onClick={() => window.dispatchEvent(new CustomEvent('open-global-search'))}
           >
             <CodePilotIcon name="search" size="md" className="text-inherit" aria-hidden />
@@ -481,11 +482,14 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`group w-full justify-start gap-2 h-9 px-3 rounded-xl text-[13px] ${
+                  className={cn(
+                    // relative so the magic ::before rib (in .mg-active-item)
+                    // anchors inside the Button.
+                    "group relative w-full justify-start gap-2 h-9 px-3 rounded-xl text-[17px]",
                     isActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                      : "text-sidebar-foreground font-normal"
-                  }`}
+                      ? "mg-active-item text-[var(--mg-accent-foreground)] font-medium"
+                      : "text-sidebar-foreground font-medium hover:bg-[var(--mg-surface-tint)]",
+                  )}
                 >
                   <CodePilotIcon name={item.icon} size="md" strokeWidth={isActive ? 2 : undefined} className="text-inherit" aria-hidden />
                   {item.label}
@@ -520,14 +524,19 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
               type="button"
               onClick={() => setProjectsCollapsed(c => !c)}
               className={cn(
-                "flex w-full items-center gap-1 px-3 h-7 cursor-pointer select-none rounded-xl",
-                "transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+                "flex w-full items-center gap-1.5 px-3 h-7 cursor-pointer select-none rounded-xl",
+                "transition-colors hover:bg-[var(--mg-surface-tint)]",
               )}
             >
-              <span className="text-[13px] font-semibold text-sidebar-foreground/55 group-hover:text-sidebar-foreground">
+              {/* 2026-06-21 Magic Glass: section header reads as accent
+                  small-caps — visible landmark, not whisper label. */}
+              <span
+                className="text-[15px] font-semibold uppercase tracking-wider"
+                style={{ color: 'var(--mg-accent-from)', opacity: 0.85 }}
+              >
                 {t('chatList.projects' as TranslationKey)}
               </span>
-              <span className="text-muted-foreground/80">
+              <span style={{ color: 'var(--mg-accent-from)', opacity: 0.6 }}>
                 {projectsCollapsed
                   ? <CaretRight size={12} />
                   : <CaretDown size={12} />}
@@ -551,7 +560,7 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
                       className="group flex items-center gap-2 rounded-xl px-3 h-8 cursor-pointer select-none transition-colors hover:bg-sidebar-accent"
                     >
                       <CodePilotIcon name="folder_add" size="md" className="shrink-0 text-muted-foreground" aria-hidden />
-                      <span className="flex-1 truncate text-left text-[13px] font-normal text-sidebar-foreground">
+                      <span className="flex-1 truncate text-left text-[17px] font-medium text-sidebar-foreground">
                         {t('chatList.newProject' as TranslationKey)}
                       </span>
                     </button>
@@ -711,16 +720,20 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
               <div
                 className="px-2 pt-1 pb-2"
               >
-                <div className="flex w-full items-center gap-1 px-3 h-7 rounded-xl transition-colors hover:bg-sidebar-accent/60">
+                <div className="flex w-full items-center gap-1.5 px-3 h-7 rounded-xl transition-colors hover:bg-[var(--mg-surface-tint)]">
                   <button
                     type="button"
                     onClick={() => setAssistantCollapsed(c => !c)}
-                    className="flex flex-1 min-w-0 items-center gap-1 cursor-pointer select-none text-left transition-colors hover:text-sidebar-foreground"
+                    className="flex flex-1 min-w-0 items-center gap-1.5 cursor-pointer select-none text-left transition-colors"
                   >
-                    <span className="text-[13px] font-semibold text-sidebar-foreground/55">
+                    {/* Magic Glass — accent small-caps, see projects section header. */}
+                    <span
+                      className="text-[15px] font-semibold uppercase tracking-wider"
+                      style={{ color: 'var(--mg-accent-from)', opacity: 0.85 }}
+                    >
                       {t('chatList.assistantSection' as TranslationKey)}
                     </span>
-                    <span className="text-muted-foreground/80">
+                    <span style={{ color: 'var(--mg-accent-from)', opacity: 0.6 }}>
                       {assistantCollapsed
                         ? <CaretRight size={12} />
                         : <CaretDown size={12} />}
@@ -804,9 +817,12 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
             );
           })()}
 
+          {/* ─── 定时任务 section ─── */}
+          <ScheduledTasksSection />
+
           {/* Empty state */}
           {filteredSessions.length === 0 && (
-            <p className="px-2.5 py-3 text-[11px] text-muted-foreground/60">
+            <p className="px-2.5 py-3 text-[15px] text-muted-foreground/60">
               {t('chatList.noSessions')}
             </p>
           )}
@@ -819,10 +835,10 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
           <Button
             variant="ghost"
             size="sm"
-            className={`w-full justify-start gap-2 h-9 px-3 rounded-xl text-[13px] ${
+            className={`w-full justify-start gap-2 h-9 px-3 rounded-xl text-[17px] ${
               pathname.startsWith("/settings")
                 ? "bg-accent text-accent-foreground font-medium"
-                : "text-sidebar-foreground font-normal"
+                : "text-sidebar-foreground font-medium"
             }`}
           >
             <CodePilotIcon name="settings" size="md" strokeWidth={pathname.startsWith("/settings") ? 2 : undefined} className="text-inherit" aria-hidden />

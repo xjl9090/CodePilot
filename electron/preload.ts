@@ -114,4 +114,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => { ipcRenderer.removeListener('notification:click', listener); };
     },
   },
+  // Desktop pet — see docs/exec-plans/active/desktop-pet.md.
+  // The pet BrowserWindow itself uses `onState`; the settings panel in the
+  // main window uses `getSettings` / `setEnabled` / `resetPosition`.
+  pet: {
+    getSettings: () => ipcRenderer.invoke('pet:get-settings') as Promise<Record<string, string>>,
+    setEnabled: (enabled: boolean) =>
+      ipcRenderer.invoke('pet:set-enabled', enabled) as Promise<{ ok: boolean }>,
+    toggleMute: () => ipcRenderer.invoke('pet:toggle-mute') as Promise<{ muted: boolean }>,
+    resetPosition: () =>
+      ipcRenderer.invoke('pet:reset-position') as Promise<{ x: number; y: number }>,
+    getAssetBaseDir: () => ipcRenderer.invoke('pet:asset-base-dir') as Promise<string>,
+    onState: (
+      callback: (payload: {
+        state: 'idle' | 'working' | 'waiting' | 'done';
+        themeId: string | null;
+        assetUrl: { idle: string; working: string; waiting: string; done: string } | null;
+        muted: boolean;
+      }) => void,
+    ) => {
+      const listener = (_event: unknown, payload: unknown) =>
+        callback(payload as Parameters<typeof callback>[0]);
+      ipcRenderer.on('pet:state', listener);
+      return () => { ipcRenderer.removeListener('pet:state', listener); };
+    },
+  },
 });

@@ -80,7 +80,7 @@ const nextConfig: NextConfig = {
       'README_CN.md',
       'README_JA.md',
       'RELEASE_NOTES.md',
-      '.codepilot/**',
+      '.xjlpilot/**',
       'apps/**',
       'docs/**',
       'release/**',

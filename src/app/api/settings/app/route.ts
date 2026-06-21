@@ -15,6 +15,7 @@ const ALLOWED_KEYS = [
   'thinking_mode',
   'theme_mode',
   'theme_family',
+  'font_size_scale',
   'default_panel',
   'agent_runtime',
   'cli_enabled',

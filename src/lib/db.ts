@@ -8,7 +8,7 @@ import type { ChannelType, ChannelBinding } from './bridge/types';
 import { getLocalDateString, localDayStartAsUTC } from './utils';
 import { inferProtocolFromLegacy } from './provider-catalog';
 
-const dataDir = process.env.CLAUDE_GUI_DATA_DIR || path.join(os.homedir(), '.codepilot');
+const dataDir = process.env.CLAUDE_GUI_DATA_DIR || path.join(os.homedir(), '.xjlpilot');
 const DB_PATH = path.join(dataDir, 'codepilot.db');
 
 let db: Database.Database | null = null;
@@ -68,6 +68,8 @@ export function getDb(): Database.Database {
     if (!fs.existsSync(DB_PATH) && process.env.CODEPILOT_DISABLE_DB_MIGRATION_IN_TESTS !== '1') {
       const home = os.homedir();
       const oldPaths = [
+        // CodePilot fork → xjlPilot rename: pull DB from prior install
+        path.join(home, '.codepilot', 'codepilot.db'),
         // Old Electron userData paths (app.getPath('userData'))
         path.join(home, 'Library', 'Application Support', 'CodePilot', 'codepilot.db'),
         path.join(home, 'Library', 'Application Support', 'codepilot', 'codepilot.db'),
@@ -1134,6 +1136,38 @@ function migrateDb(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_notification_deliveries_event_id ON notification_deliveries(event_id);
   `);
+
+  // Ensure pet_settings / pet_themes tables exist (desktop-pet feature).
+  // pet_settings is intentionally a KV table so future fields (size, opacity,
+  // auto-hide, …) don't need a migration round-trip. Known keys:
+  //   enabled         '0' | '1'    — master switch (default '0')
+  //   muted           '0' | '1'    — bubble suppression (default '0')
+  //   pos_x / pos_y   number       — last drag position; null until first drag
+  //   current_theme_id string|null — fk to pet_themes.id; null if no theme yet
+  // pet_themes stores user-uploaded asset bundles. is_complete=1 means all 4
+  // required state PNGs are on disk under ~/.xjlpilot/pet/{id}/.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pet_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS pet_themes (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      is_complete INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+
+  // Seed default pet_settings keys exactly once. INSERT OR IGNORE keeps
+  // user-set values intact across restarts.
+  db.exec(`
+    INSERT OR IGNORE INTO pet_settings (key, value) VALUES
+      ('enabled', '0'),
+      ('muted', '0');
+  `);
 }
 
 // ==========================================
@@ -1685,6 +1719,80 @@ export function getAllSettings(): SettingsMap {
     settings[row.key] = row.value;
   }
   return settings;
+}
+
+// ==========================================
+// Pet (Desktop Pet) Operations
+// See docs/exec-plans/active/desktop-pet.md for the design.
+// pet_settings is a KV table; pet_themes is row-per-theme.
+// Asset files live on disk under ~/.xjlpilot/pet/{themeId}/ — never blob in DB.
+// ==========================================
+
+export interface PetTheme {
+  id: string;
+  name: string;
+  created_at: string;
+  is_complete: number;
+}
+
+export function getPetSetting(key: string): string | undefined {
+  const db = getDb();
+  const row = db.prepare('SELECT value FROM pet_settings WHERE key = ?').get(key) as
+    | { value: string }
+    | undefined;
+  return row?.value;
+}
+
+export function setPetSetting(key: string, value: string): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO pet_settings (key, value, updated_at)
+     VALUES (?, ?, datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+  ).run(key, value);
+}
+
+export function getAllPetSettings(): Record<string, string> {
+  const db = getDb();
+  const rows = db.prepare('SELECT key, value FROM pet_settings').all() as
+    { key: string; value: string }[];
+  const result: Record<string, string> = {};
+  for (const row of rows) result[row.key] = row.value;
+  return result;
+}
+
+export function listPetThemes(): PetTheme[] {
+  const db = getDb();
+  return db.prepare(
+    'SELECT id, name, created_at, is_complete FROM pet_themes ORDER BY created_at DESC'
+  ).all() as PetTheme[];
+}
+
+export function getPetTheme(id: string): PetTheme | undefined {
+  const db = getDb();
+  return db.prepare(
+    'SELECT id, name, created_at, is_complete FROM pet_themes WHERE id = ?'
+  ).get(id) as PetTheme | undefined;
+}
+
+export function createPetTheme(id: string, name: string): void {
+  const db = getDb();
+  db.prepare('INSERT INTO pet_themes (id, name) VALUES (?, ?)').run(id, name);
+}
+
+export function setPetThemeComplete(id: string, complete: boolean): void {
+  const db = getDb();
+  db.prepare('UPDATE pet_themes SET is_complete = ? WHERE id = ?').run(complete ? 1 : 0, id);
+}
+
+export function deletePetTheme(id: string): void {
+  const db = getDb();
+  db.prepare('DELETE FROM pet_themes WHERE id = ?').run(id);
+  // If the deleted theme was current, clear it. Caller deletes asset files.
+  const current = getPetSetting('current_theme_id');
+  if (current === id) {
+    db.prepare("DELETE FROM pet_settings WHERE key = 'current_theme_id'").run();
+  }
 }
 
 // ==========================================

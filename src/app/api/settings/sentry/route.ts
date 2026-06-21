@@ -5,7 +5,7 @@ import os from 'os';
 
 /** Path to the Sentry opt-out marker file, read by Electron main process at startup */
 function getSentryMarkerPath() {
-  return path.join(os.homedir(), '.codepilot', 'sentry-disabled');
+  return path.join(os.homedir(), '.xjlpilot', 'sentry-disabled');
 }
 
 /** GET /api/settings/sentry — read opt-out state */

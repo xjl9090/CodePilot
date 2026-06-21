@@ -9,6 +9,12 @@ import { AppShell } from "@/components/layout/AppShell";
 import { getAllThemeFamilies, getThemeFamilyMetas } from "@/lib/theme/loader";
 import { renderThemeFamilyCSS } from "@/lib/theme/render-css";
 import { getSetting } from "@/lib/db";
+import {
+  FONT_SCALE_KEY,
+  FONT_SCALE_PERCENT,
+  FONT_SCALE_SETTING,
+  normalizeFontScale,
+} from "@/lib/font-scale";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,7 +27,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CodePilot",
+  title: "xjlPilot",
   description: "A multi-model AI agent desktop client",
 };
 
@@ -41,12 +47,15 @@ export default function RootLayout({
   // SQLite cannot handle parallel writes from separate processes ("database is locked").
   let dbThemeMode: string | undefined;
   let dbThemeFamily: string | undefined;
+  let dbFontScale: string | undefined;
   try {
     dbThemeMode = getSetting('theme_mode') || undefined;
     dbThemeFamily = getSetting('theme_family') || undefined;
+    dbFontScale = getSetting(FONT_SCALE_SETTING) || undefined;
   } catch {
     // Build-time or DB unavailable — fall back to localStorage-only theme
   }
+  const initialFontScale = normalizeFontScale(dbFontScale);
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -75,6 +84,10 @@ export default function RootLayout({
         {dbThemeMode && (
           <script dangerouslySetInnerHTML={{ __html: `(function(){try{if(!localStorage.getItem('theme')){localStorage.setItem('theme',${JSON.stringify(dbThemeMode)})}}catch(e){}})();` }} />
         )}
+        {/* Anti-FOUC: scale `<html>` font-size from localStorage → DB fallback.
+            Whole-app rem cascade scales typography + spacing + radius in one
+            shot. Keys + percentages mirror src/lib/font-scale.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var SCALE=${JSON.stringify(FONT_SCALE_PERCENT)};var key=${JSON.stringify(FONT_SCALE_KEY)};var db=${JSON.stringify(initialFontScale)};var s=localStorage.getItem(key)||db;if(!SCALE[s])s='default';document.documentElement.style.fontSize=SCALE[s];if(!localStorage.getItem(key))localStorage.setItem(key,s)}catch(e){}})();` }} />
         <style id="theme-family-vars" dangerouslySetInnerHTML={{ __html: themeFamilyCSS }} />
       </head>
       <body
