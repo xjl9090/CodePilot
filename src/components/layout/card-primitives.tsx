@@ -131,16 +131,16 @@ export function CardSurface({ kind, variant, className, children }: CardSurfaceP
       {...attrs}
       className={cn(
         "flex h-full w-full flex-col overflow-hidden",
-        // The sidebar / workspace kinds need an inline background so
-        // the translucent fill shows up everywhere off-mac too (web
-        // sidebars get the legacy `--platform-surface-sidebar` token).
-        kind === "sidebar" && "bg-[var(--platform-surface-sidebar)] backdrop-blur-xl",
-        kind === "workspace" && "bg-background",
-        kind === "main" && "bg-background",
-        kind === "fileTree" && "bg-background",
-        // Assistant rail is opaque by deliberate user request (see
-        // AssistantPanel's "Round 5" note) — same treatment as fileTree.
-        kind === "assistant" && "bg-background",
+        // 2026-06-21 Magic Glass Round 3: all surfaces share the magic
+        // identity. Sidebar gets the lighter overdrive; main / workspace
+        // / fileTree / assistant get the slightly deeper variant so the
+        // sidebar still reads as a sibling pane.
+        kind === "sidebar" && "mg-sidebar-surface backdrop-blur-xl",
+        kind === "workspace" && "mg-content-surface",
+        kind === "main" && "mg-content-surface",
+        kind === "fileTree" && "mg-content-surface",
+        // Assistant rail follows the same surface.
+        kind === "assistant" && "mg-content-surface",
         className,
       )}
     >

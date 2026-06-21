@@ -38,6 +38,19 @@ export interface ThemeColors {
   sidebarAccentForeground: string;
   sidebarBorder: string;
   sidebarRing: string;
+  /** Magic Glass profile (2026-06-21) — neon dual-stop accent applied
+   *  to shell layer (sidebar / topbar / composer / chat chrome).
+   *  Optional so existing themes without these keys still load; the
+   *  CSS layer falls back to the :root defaults in globals.css when a
+   *  theme omits them. */
+  magicAccentFrom?: string;
+  magicAccentTo?: string;
+  magicAccentForeground?: string;
+  magicGlow?: string;
+  magicSurfaceTint?: string;
+  magicEdge?: string;
+  magicActiveBgFrom?: string;
+  magicActiveBgTo?: string;
 }
 
 /** Maps a code highlighting theme name for light and dark modes. */

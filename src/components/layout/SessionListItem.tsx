@@ -72,14 +72,18 @@ export function SessionListItem({
       <Link
         href={`/chat/${session.id}`}
         className={cn(
-          "flex items-center gap-2 rounded-xl px-3 h-8 transition-all duration-150 min-w-0",
-          isWorkspace
-            ? isActive
-              ? "bg-primary/[0.12] text-sidebar-accent-foreground"
-              : "text-sidebar-foreground hover:bg-primary/[0.10]"
-            : isActive
-              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "text-sidebar-foreground hover:bg-sidebar-accent"
+          // Position relative so the ::before rib can absolutely anchor inside.
+          "relative flex items-center gap-2 rounded-xl px-3 h-8 transition-all duration-150 min-w-0",
+          // Idle / hover share base; active gets the magic gradient wash + glow.
+          isActive
+            // 2026-06-21 Magic Glass: active items get
+            //   • a gradient wash (subtle, 12% violet → 10% mint)
+            //   • a 1px neon border + outer glow
+            //   • a 3px leading rib (full-height vertical gradient bar)
+            // The rib is rendered via a ::before pseudo (data-mg-rib) so we
+            // don't need an extra child element threading through Radix.
+            ? "text-[var(--mg-accent-foreground)] mg-active-item"
+            : "text-sidebar-foreground hover:bg-[var(--mg-surface-tint)]",
         )}
       >
         {/* Left icon area — streaming/approval indicators.
@@ -89,9 +93,15 @@ export function SessionListItem({
         {(isSessionStreaming || needsApproval || !isWorkspace) && (
           <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center">
             {isSessionStreaming && (
+              // 2026-06-21 Magic Glass: streaming session is now a "beacon" —
+              // mint dot with extra-wide ping halo so the eye lands on it
+              // from across the sidebar. (Was bg-status-success.)
               <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-status-success opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-status-success" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--mg-accent-to)] opacity-75" />
+                <span
+                  className="relative inline-flex h-2 w-2 rounded-full bg-[var(--mg-accent-to)]"
+                  style={{ boxShadow: '0 0 8px var(--mg-glow)' }}
+                />
               </span>
             )}
             {needsApproval && !isSessionStreaming && (
@@ -102,13 +112,13 @@ export function SessionListItem({
           </span>
         )}
         {/* Title — flex-1 + truncate ensures it shrinks */}
-        <span className="flex-1 min-w-0 line-clamp-1 text-[13px] font-normal leading-tight break-all">
+        <span className="flex-1 min-w-0 line-clamp-1 text-[17px] font-medium leading-tight break-all">
           {session.title}
         </span>
         {/* Right area — fixed width, time or dots swap via opacity */}
         <span className="shrink-0 w-[38px] flex items-center justify-end">
           <span className={cn(
-            "text-[11px] text-muted-foreground/40 truncate transition-opacity",
+            "text-[15px] text-muted-foreground/70 truncate transition-opacity",
             showActions ? "opacity-0" : "opacity-100"
           )}>
             {formatRelativeTime(session.updated_at, t)}
@@ -255,7 +265,7 @@ export function SplitGroupSection({
                 </span>
               )}
               <div className="flex-1 min-w-0">
-                <span className="line-clamp-1 text-[13px] font-medium leading-tight break-all">
+                <span className="line-clamp-1 text-[17px] font-medium leading-tight break-all">
                   {session.title}
                 </span>
               </div>

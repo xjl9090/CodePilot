@@ -42,7 +42,15 @@
     "sidebarAccent": "oklch(0.899 0.008 286.2)",
     "sidebarAccentForeground": "oklch(0.324 0.023 274.8)",
     "sidebarBorder": "oklch(0.872 0.011 286.2)",
-    "sidebarRing": "oklch(0.528 0.096 248.8)"
+    "sidebarRing": "oklch(0.528 0.096 248.8)",
+    "magicAccentFrom": "oklch(0.62 0.10 285)",
+    "magicAccentTo": "oklch(0.78 0.08 165)",
+    "magicAccentForeground": "oklch(0.16 0.01 285)",
+    "magicGlow": "oklch(0.62 0.10 285 / 0.30)",
+    "magicSurfaceTint": "oklch(0.62 0.10 285 / 0.05)",
+    "magicEdge": "oklch(0.62 0.10 285 / 0.35)",
+    "magicActiveBgFrom": "oklch(0.62 0.10 285 / 0.10)",
+    "magicActiveBgTo": "oklch(0.78 0.08 165 / 0.08)"
   },
   "dark": {
     "background": "oklch(0.237 0.020 271.8)",
@@ -75,6 +83,14 @@
     "sidebarAccent": "oklch(0.289 0.024 264.1)",
     "sidebarAccentForeground": "oklch(0.949 0.020 245.6)",
     "sidebarBorder": "oklch(0.289 0.024 264.1)",
-    "sidebarRing": "oklch(0.863 0.071 247.4)"
+    "sidebarRing": "oklch(0.863 0.071 247.4)",
+    "magicAccentFrom": "oklch(0.72 0.12 285)",
+    "magicAccentTo": "oklch(0.84 0.10 165)",
+    "magicAccentForeground": "oklch(0.97 0.01 285)",
+    "magicGlow": "oklch(0.72 0.12 285 / 0.40)",
+    "magicSurfaceTint": "oklch(0.72 0.12 285 / 0.06)",
+    "magicEdge": "oklch(0.72 0.12 285 / 0.45)",
+    "magicActiveBgFrom": "oklch(0.72 0.12 285 / 0.14)",
+    "magicActiveBgTo": "oklch(0.84 0.10 165 / 0.11)"
   }
 }

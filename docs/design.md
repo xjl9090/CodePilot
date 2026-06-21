@@ -954,3 +954,61 @@ Don't display only the enabled count — users hide things and need to remember 
 | Provider compat pill | `ProviderCard.tsx` header (second pill via `data.compat`) |
 | Per-row compat badge | `ModelsSection.tsx` (next to source badge in row label) |
 | Runtime filter dropdown | `ModelsSection.tsx` (alongside enabled/hidden tabs + search) |
+
+---
+
+## Magic Glass profile (2026-06-21)
+
+> 用户授权的"明牌破规"——在保留 charcoal monochrome 内容体系的前提下，给 **壳层** (shell) 引入一个紫青 × 青绿 neon 双色 token 层，让侧边栏 / 顶栏 / Composer / 宠物有"被设计过"的存在感。
+
+### 哪些规则被破
+
+| 规则 | 状态 | 备注 |
+|---|---|---|
+| 单色 charcoal accent | **破** | 引入 `--mg-accent-from/to` neon 双色 token。仅在壳层用。 |
+| no shadows by default | **破**（壳层） | active sidebar item + composer focused 加 outer glow；topbar 加 1px neon underline。内容区仍然 no shadow。 |
+| 内容区永远不透明 (Apple HIG) | **保留** | 聊天消息正文 / 代码块 / Settings 卡片**完全不用** `--mg-*`。 |
+| `lint:colors` 禁原始 Tailwind 颜色 | **保留** | 所有新颜色作为 `--mg-*` CSS 变量进 `globals.css` + `themes/*.json`。组件读 token，从来不读 raw Tailwind。 |
+| 12 套 theme family 一致性 | **部分破** | `default` 拿满饱和（chroma 0.18–0.22）；其余 11 套用同 hue 但 desaturated（chroma 0.10）作为 fallback。切主题不会"魔幻消失"，只是变温和。 |
+
+### Token 清单
+
+`globals.css` 的 `:root` (light) 和 `.dark` 块各定义一份；`themes/*.json` 每套主题在 `light` 和 `dark` 子对象里也都有这 8 个 key：
+
+| Token | 用途 |
+|---|---|
+| `--mg-accent-from` | neon 主色 (default: violet 285°) |
+| `--mg-accent-to` | neon 副色 (default: mint-cyan 165°) |
+| `--mg-accent-foreground` | 在 active 背景上的文字色 |
+| `--mg-glow` | box-shadow / drop-shadow 用的 halo 色 |
+| `--mg-surface-tint` | hover 时的低对比度 wash (~6%) |
+| `--mg-edge` | 1px neon 边框色 |
+| `--mg-active-bg-from` / `--mg-active-bg-to` | active item 背景 gradient 两端 |
+
+### 复用 utility class
+
+`globals.css` 末尾定义：
+
+| Class | 用在哪 | 视觉 |
+|---|---|---|
+| `.mg-active-item` | sidebar 中选中的 nav link / chat session row | gradient 背景 + 1px neon 边 + outer glow + 3px 垂直 rib (via ::before) |
+| `.mg-topbar-wash` | 顶栏内部 absolute 全屏铺一层 | 110° 双色 gradient，8s ease-in-out alternate 漂移，opacity 10% |
+| `.mg-topbar-underline` | 顶栏 absolute bottom | 1px gradient line，两端 fade |
+| `.mg-focus-halo` | Composer 外壳 wrapper | `:focus-within` 时 outer glow + 1px neon 边；200ms 进 / 600ms 出 |
+
+### 用在哪 / 不用在哪
+
+| 表面 | 用 magic-glass | 备注 |
+|---|---|---|
+| 左侧边栏 (ChatListPanel + SessionListItem) | ✅ | active item rib + glow，section header accent 小帽体，streaming dot 改成 mint beacon |
+| 顶栏 (UnifiedTopBar) | ✅ | 全栏 wash + neon underline |
+| Composer (MessageInput) | ✅ | focus-within halo |
+| 桌面宠物 working aura | ✅ | gradient 取代原来硬编码橙色 |
+| 聊天消息正文 / 代码块 | ❌ | 阅读区永远不引入 neon |
+| Settings 卡片 / Dialogs | ❌ | 沿用 monochrome austere |
+| Modals / toasts | ❌ | 沿用 |
+| `prefers-reduced-motion` | 自动 opt-out | `.mg-topbar-wash` 动画静止 |
+
+### 为什么不做成新 theme family
+
+`magic-glass` 是产品的**新身份**，不是供用户在 Appearance 里挑挑看的"备用调色"。它整合在所有 12 个主题里——每套主题以自己的 vibe 表达魔幻（default 最浓，desaturated fallback 用同 hue 但抑制饱和）。一个用 Tokyo Night 的用户切到 Default 不应该看到 "突然魔幻了"——他应该一直觉得"我的 xjlPilot 是这副样子"。

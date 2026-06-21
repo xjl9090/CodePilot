@@ -192,12 +192,19 @@ export function UnifiedTopBar() {
   // On non-chat routes the bar is otherwise just a thin drag region.
   // We still need the reopen button visible there so the user has a
   // way back to the sidebar from /skills, /mcp, /settings, etc.
+  //
+  // 2026-06-21 Magic Glass: the wash + underline also apply HERE, not
+  // just on chat routes — the user's first impression is whatever
+  // route the app lands on (default /chat list), so this branch needs
+  // the same identity as the chat-session branch below.
   if (!isChatRoute) {
     return (
       <div
-        className="flex h-10 shrink-0 items-center gap-2 pl-3 bg-[var(--platform-surface-bar)]"
+        className="relative flex h-10 shrink-0 items-center gap-2 pl-3 bg-[var(--platform-surface-bar)] overflow-hidden"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
+        <div aria-hidden className="mg-topbar-wash absolute inset-0" />
+        <div aria-hidden className="mg-topbar-underline" />
         {sidebarToggleButton}
         {isSettingsRoute && (
           <Button
@@ -225,9 +232,18 @@ export function UnifiedTopBar() {
         // Default = `var(--background)` so non-macOS visuals are
         // identical to the prior `bg-background`. macOS profile drops
         // alpha so Electron's window vibrancy shows through the bar.
-        className="flex h-10 shrink-0 items-center gap-3 bg-[var(--platform-surface-bar)] px-4"
+        //
+        // 2026-06-21 Magic Glass: the topbar is now also the layer where
+        // a slow gradient wash (mg-drift, 8s) + neon underline live.
+        // Both are siblings positioned absolutely within this row; their
+        // pointer events are disabled so drag / clicks still pass through.
+        className="relative flex h-10 shrink-0 items-center gap-3 bg-[var(--platform-surface-bar)] px-4 overflow-hidden"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
+        {/* Magic Glass wash — slowly drifting gradient, very low opacity. */}
+        <div aria-hidden className="mg-topbar-wash absolute inset-0" />
+        {/* Magic Glass underline — 1px gradient line, fades at the ends. */}
+        <div aria-hidden className="mg-topbar-underline" />
         {/* Reopen-sidebar toggle, only present when the user collapsed
             the left nav. Pairs with the collapse button inside
             ChatListPanel; null otherwise so it doesn't take up space. */}

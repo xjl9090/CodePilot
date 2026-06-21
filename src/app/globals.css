@@ -157,6 +157,41 @@
   --context-dot-pending-next-turn: oklch(0.70 0.02 0);
   /* Cache = secondary but distinct, cool blue-gray (chroma 0.05). */
   --context-dot-cache-or-previous: oklch(0.78 0.05 220);
+
+  /* ────────────────────────────────────────────────────────────────
+   * Magic Glass profile (2026-06-21) — see docs/design.md 末尾节.
+   * User-authorized rule break: introduces a neon dual-stop accent
+   * (violet × mint-cyan) that overlays the existing monochrome
+   * chrome on sidebar / topbar / composer / chat affordances.
+   *
+   * STRICT BOUNDARY: chat message body, code blocks, settings cards
+   * do NOT consume --mg-* tokens. The magic lives in shell layer.
+   *
+   * Themes inheriting the full saturation: default (this file).
+   * 11 other themes provide desaturated equivalents (chroma ~0.10)
+   * via their JSON. Component code reads only the tokens; whether
+   * "magic" or "subdued" comes from the active theme.
+   * ──────────────────────────────────────────────────────────────── */
+  --mg-accent-from:        oklch(0.62 0.18 285);          /* violet */
+  --mg-accent-to:          oklch(0.78 0.14 165);          /* mint-cyan */
+  --mg-accent-foreground:  oklch(0.16 0.01 285);          /* near-black, violet undertone */
+  --mg-glow:               oklch(0.62 0.18 285 / 0.35);
+  --mg-surface-tint:       oklch(0.62 0.18 285 / 0.06);
+  --mg-edge:               oklch(0.62 0.18 285 / 0.40);
+  --mg-active-bg-from:     oklch(0.62 0.18 285 / 0.12);
+  --mg-active-bg-to:       oklch(0.78 0.14 165 / 0.10);
+  /* Sidebar overdrive (Round 2, 2026-06-21): the sidebar gets a
+     dedicated deep-violet-to-deep-teal gradient surface — the magic is
+     no longer subtle. Foreground bumps from charcoal to near-white so
+     labels read on the dark gradient. The active item background flips
+     to higher-saturation so it can still stand out on the new busier
+     surface. macOS vibrancy still composes underneath. */
+  --mg-sidebar-bg-from:    oklch(0.22 0.10 285);          /* deep violet */
+  --mg-sidebar-bg-to:      oklch(0.26 0.06 195);          /* deep teal   */
+  --mg-sidebar-foreground: oklch(0.92 0.02 285);          /* near-white  */
+  --mg-sidebar-foreground-muted: oklch(0.72 0.04 285);
+  --mg-active-bg-strong-from: oklch(0.62 0.18 285 / 0.40);
+  --mg-active-bg-strong-to:   oklch(0.78 0.14 165 / 0.30);
 }
 
 .dark {
@@ -225,6 +260,24 @@
   /* Dark mode: bump the alpha so the soft elevation reads against a
      dark background (otherwise the shadow vanishes). */
   --shadow-diffuse: 0 12px 40px -8px rgba(0, 0, 0, 0.45), 0 4px 12px -4px rgba(0, 0, 0, 0.25);
+
+  /* Magic Glass — dark variant (see :root block for rationale). */
+  --mg-accent-from:        oklch(0.72 0.22 285);          /* brighter violet */
+  --mg-accent-to:          oklch(0.84 0.16 165);          /* brighter mint */
+  --mg-accent-foreground:  oklch(0.97 0.01 285);
+  --mg-glow:               oklch(0.72 0.22 285 / 0.50);
+  --mg-surface-tint:       oklch(0.72 0.22 285 / 0.08);
+  --mg-edge:               oklch(0.72 0.22 285 / 0.55);
+  --mg-active-bg-from:     oklch(0.72 0.22 285 / 0.18);
+  --mg-active-bg-to:       oklch(0.84 0.16 165 / 0.14);
+  /* Sidebar overdrive — dark variant. Slightly deeper than :root so
+     existing dark-mode app chrome doesn't get out-shone. */
+  --mg-sidebar-bg-from:    oklch(0.18 0.10 285);
+  --mg-sidebar-bg-to:      oklch(0.20 0.06 195);
+  --mg-sidebar-foreground: oklch(0.96 0.02 285);
+  --mg-sidebar-foreground-muted: oklch(0.76 0.04 285);
+  --mg-active-bg-strong-from: oklch(0.72 0.22 285 / 0.45);
+  --mg-active-bg-strong-to:   oklch(0.84 0.16 165 / 0.34);
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -822,4 +875,480 @@ html.dark[data-platform="darwin"][data-shell="electron"][data-platform-style="au
 }
 .dark .codepilot-md-template-pitch :where(h1, h2, h3, h4, h5, h6) {
   color: rgb(196 181 253);
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Magic Glass animations (2026-06-21). Restrained: only the topbar
+ * wash uses an animated keyframe; everything else is hover/focus state
+ * transitions. 8s ease-in-out alternate so the drift is barely felt.
+ * `prefers-reduced-motion` opts out — eye comfort over showmanship.
+ * ────────────────────────────────────────────────────────────────────── */
+@keyframes mg-drift {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mg-topbar-wash { animation: none !important; }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Magic Glass — reusable utility classes (sidebar / topbar / composer).
+ * Components that don't want to inline-style every shadow & gradient pull
+ * in these classes.  Placed AFTER theme variables so cascading lookups
+ * resolve the per-theme oklch() values.
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* .mg-active-item: active list-item style (chat session, nav link, etc.)
+ *   - subtle dual-stop wash background
+ *   - neon 1px border + outer glow
+ *   - 3px leading rib via ::before
+ */
+.mg-active-item {
+  background-image: linear-gradient(135deg, var(--mg-active-bg-from), var(--mg-active-bg-to));
+  box-shadow: inset 0 0 0 1px var(--mg-edge), 0 0 12px -2px var(--mg-glow);
+}
+.mg-active-item::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background-image: linear-gradient(180deg, var(--mg-accent-from), var(--mg-accent-to));
+  box-shadow: 0 0 6px var(--mg-glow);
+  pointer-events: none;
+}
+
+/* .mg-topbar-wash: slow drifting gradient sitting *under* the topbar
+ *   contents at low opacity. The wash is the bar's "ambient sign of life".
+ *   Animation runs unless the user has prefers-reduced-motion (handled
+ *   earlier in this file). */
+.mg-topbar-wash {
+  background-image: linear-gradient(
+    110deg,
+    var(--mg-accent-from) 0%,
+    transparent 30%,
+    transparent 70%,
+    var(--mg-accent-to) 100%
+  );
+  background-size: 200% 100%;
+  background-position: 0% 50%;
+  opacity: 0.10;
+  animation: mg-drift 8s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+/* .mg-topbar-underline: a 1px gradient line replacing the solid bottom
+ *   border. Sits at the bottom edge, fades in/out at the ends. */
+.mg-topbar-underline {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 1px;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--mg-edge) 30%,
+    var(--mg-edge) 70%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* .mg-focus-halo: applied to composer outer wrapper via :focus-within
+ *   to indicate the input is hot. Restrained: just an outer neon glow,
+ *   no animated chase.  Transition asymmetric: 200ms in, 600ms fade out
+ *   so a click-away feels gentle. */
+.mg-focus-halo {
+  transition: box-shadow 200ms ease-out;
+}
+.mg-focus-halo:focus-within {
+  box-shadow: inset 0 0 0 1px var(--mg-edge), 0 0 16px -2px var(--mg-glow);
+  transition: box-shadow 600ms ease-out;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Magic Glass — Round 2 (2026-06-21): sidebar overdrive.
+ *
+ * .mg-sidebar-surface: deep violet→teal gradient as the sidebar bg.
+ *   - 135° linear gradient between mg-sidebar-bg-{from,to}
+ *   - inset 1px highlight at the top so the card edge reads
+ *   - within this scope we REWRITE --sidebar-foreground and the
+ *     surrounding text tokens so existing children (which read
+ *     text-sidebar-foreground) light up automatically. No child
+ *     component edits required — one new wrapper inherits.
+ * ────────────────────────────────────────────────────────────────────── */
+.mg-sidebar-surface {
+  background-image: linear-gradient(
+    155deg,
+    var(--mg-sidebar-bg-from) 0%,
+    var(--mg-sidebar-bg-to) 100%
+  );
+  box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 0.08);
+  /* Token rewrites that cascade to all descendants reading these vars.
+     This is how the sidebar's existing `text-sidebar-foreground`,
+     `bg-sidebar-accent`, etc. classes pick up the new palette without
+     individual component changes. */
+  --sidebar-foreground:                var(--mg-sidebar-foreground);
+  --sidebar-accent-foreground:         var(--mg-accent-foreground);
+  --muted-foreground:                  var(--mg-sidebar-foreground-muted);
+  /* Stronger active gradient on the now-dark surface (the previous 12%
+     wash was invisible against violet). */
+  --mg-active-bg-from:                 var(--mg-active-bg-strong-from);
+  --mg-active-bg-to:                   var(--mg-active-bg-strong-to);
+  /* Surface hover tint also bumps so hover registers on the dark bg. */
+  --mg-surface-tint:                   oklch(1 0 0 / 0.06);
+}
+.mg-sidebar-surface .mg-active-item {
+  color: oklch(0.99 0.01 285);            /* near-white label */
+}
+
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Magic Glass — Round 3 (2026-06-21): full-window theme unification.
+ *
+ * The user asked the entire window (chat / file tree / assistant rail /
+ * settings) to share the sidebar's deep violet identity. This BREAKS the
+ * earlier "content layer stays opaque (Apple HIG)" rule explicitly — the
+ * trade is acknowledged in docs/design.md Magic Glass section.
+ *
+ * .mg-content-surface: deeper-than-sidebar gradient bg + token rewrites.
+ *   - background slightly darker than sidebar so the sidebar still reads
+ *     as a sibling surface (otherwise sidebar+main would blur together).
+ *   - rewrites --background / --card / --popover / --muted /
+ *     --foreground / --muted-foreground inside this scope so every child
+ *     using bg-background / bg-card / text-foreground / etc. picks up
+ *     the dark palette automatically. (Same technique used by the
+ *     sidebar overdrive.)
+ *   - inset 1px top highlight so the surface edge reads as a separate
+ *     pane against the sidebar.
+ * ────────────────────────────────────────────────────────────────────── */
+.mg-content-surface {
+  background-image: linear-gradient(
+    165deg,
+    oklch(0.18 0.08 285) 0%,
+    oklch(0.20 0.05 220) 100%
+  );
+  box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 0.05);
+
+  /* Token rewrites — cascade into every descendant. */
+  --background:        oklch(0.18 0.08 285);              /* matches gradient mean */
+  --foreground:        oklch(0.96 0.02 285);              /* near-white labels */
+  --card:              oklch(0.30 0.08 285);              /* lifts visibly above bg */
+  --card-foreground:   oklch(0.97 0.02 285);
+  --popover:           oklch(0.30 0.08 285);
+  --popover-foreground:oklch(0.97 0.02 285);
+  --muted:             oklch(0.26 0.06 285);
+  /* muted-foreground was 0.74 — that reads as "dim grey" on white but
+     "barely visible smudge" on this dark bg. Bump to 0.82 so secondary
+     text is still secondary but ACTUALLY readable. */
+  --muted-foreground:  oklch(0.82 0.04 285);
+  --secondary:         oklch(0.28 0.06 285);
+  --secondary-foreground: oklch(0.96 0.02 285);
+  --accent:            oklch(0.34 0.10 285);
+  --accent-foreground: oklch(0.99 0.01 285);
+  --border:            oklch(1 0 0 / 0.18);
+  --input:             oklch(0.26 0.06 285);
+  /* The user message bubble normally is a darker chip on a light bg;
+     since we flipped the bg dark, re-tone the bubble to be slightly
+     LIGHTER than the canvas so the chip is still visibly a "bubble." */
+  --user-bubble:            oklch(0.40 0.10 285);
+  --user-bubble-foreground: oklch(0.99 0.01 285);
+
+  /* Sidebar tokens too — same scope, gets cascaded if a child uses
+     sidebar-related classes (e.g. text-sidebar-foreground from session
+     items rendered inside main, like /chat session list items). */
+  --sidebar-foreground:        oklch(0.96 0.02 285);
+  --sidebar-accent-foreground: oklch(0.99 0.01 285);
+
+  /* Status-muted backgrounds still need to be visible — but bumped a
+     touch so they read on the dark bg (the 10% versions get swallowed). */
+  --status-success-muted: oklch(0.65 0.18 150 / 0.20);
+  --status-warning-muted: oklch(0.78 0.18 65 / 0.20);
+  --status-error-muted:   oklch(0.68 0.22 22 / 0.22);
+  --status-info-muted:    oklch(0.62 0.18 262 / 0.20);
+}
+
+/* The dark mode of this surface is essentially the same — the violet
+   gradient already reads as "dark." We bump card/popover slightly for
+   parity with the rest of the dark theme. */
+.dark .mg-content-surface {
+  background-image: linear-gradient(
+    165deg,
+    oklch(0.14 0.08 285) 0%,
+    oklch(0.16 0.05 220) 100%
+  );
+  --background:        oklch(0.14 0.08 285);
+  --foreground:        oklch(0.97 0.02 285);
+  --card:              oklch(0.18 0.07 285);
+  --card-foreground:   oklch(0.97 0.02 285);
+  --popover:           oklch(0.18 0.07 285);
+  --popover-foreground:oklch(0.97 0.02 285);
+  --muted:             oklch(0.22 0.06 285);
+  --muted-foreground:  oklch(0.76 0.04 285);
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Magic Glass — Round 3 follow-up (2026-06-21): readability fallback.
+ *
+ * Some components hardcoded text-zinc-X / text-stone-X / text-neutral-X
+ * (i.e. fixed dark greys), which were fine on white but invisible on
+ * the new violet surface. Scope-override them when they live inside a
+ * magic surface — light up to readable greys. !important is justified
+ * here because the components reach for specific zinc shades via
+ * Tailwind's generated classes; we have to win against those.
+ *
+ * Also: ANY `opacity-XX` modifier baked into text color classes (e.g.
+ * `text-foreground/40`) would now compute against the WHITE foreground
+ * and produce visible-but-faint text. We can't override those generated
+ * classes by name, but the bumped --muted-foreground (above) handles
+ * the most common faint-text case.
+ * ────────────────────────────────────────────────────────────────────── */
+.mg-content-surface .text-zinc-400,
+.mg-content-surface .text-zinc-500,
+.mg-content-surface .text-zinc-600,
+.mg-content-surface .text-zinc-700,
+.mg-content-surface .text-gray-400,
+.mg-content-surface .text-gray-500,
+.mg-content-surface .text-gray-600,
+.mg-content-surface .text-gray-700,
+.mg-content-surface .text-stone-400,
+.mg-content-surface .text-stone-500,
+.mg-content-surface .text-stone-600,
+.mg-content-surface .text-stone-700,
+.mg-content-surface .text-neutral-400,
+.mg-content-surface .text-neutral-500,
+.mg-content-surface .text-neutral-600,
+.mg-content-surface .text-neutral-700,
+.mg-sidebar-surface .text-zinc-400,
+.mg-sidebar-surface .text-zinc-500,
+.mg-sidebar-surface .text-zinc-600,
+.mg-sidebar-surface .text-gray-400,
+.mg-sidebar-surface .text-gray-500,
+.mg-sidebar-surface .text-gray-600 {
+  color: oklch(0.82 0.04 285) !important;
+}
+
+/* Anything dim that uses ANY foreground token with an opacity modifier
+ * (Tailwind v4 generates `color: oklch(... / N%)` which composites the
+ * dark bg through the alpha, killing the text). We can't enumerate every
+ * variant (text-foreground/40, /50, /55, /60, /70 …) so use attribute-
+ * substring selectors and force a flat readable color. !important wins
+ * against Tailwind's generated rule. */
+.mg-content-surface [class*="text-foreground/"],
+.mg-content-surface [class*="text-muted-foreground/"],
+.mg-content-surface [class*="text-card-foreground/"],
+.mg-sidebar-surface [class*="text-sidebar-foreground/"],
+.mg-sidebar-surface [class*="text-muted-foreground/"],
+.mg-sidebar-surface [class*="text-foreground/"] {
+  color: oklch(0.88 0.03 285) !important;
+}
+
+/* "Heavier" opacity variants — /70 /80 /90 — usually mean "primary text
+ * but dimmed slightly". Bump those even brighter. */
+.mg-content-surface [class*="text-foreground/8"],
+.mg-content-surface [class*="text-foreground/9"],
+.mg-content-surface [class*="text-foreground/7"],
+.mg-content-surface [class*="text-muted-foreground/8"],
+.mg-content-surface [class*="text-muted-foreground/9"],
+.mg-sidebar-surface [class*="text-sidebar-foreground/8"],
+.mg-sidebar-surface [class*="text-sidebar-foreground/9"] {
+  color: oklch(0.95 0.02 285) !important;
+}
+
+/* Inline <code>, <kbd>, <pre> elements pull from text-foreground or
+ * --foreground; on the violet surface their default colors blend in.
+ * Force them to bright. */
+.mg-content-surface code,
+.mg-content-surface kbd,
+.mg-sidebar-surface code,
+.mg-sidebar-surface kbd {
+  color: oklch(0.92 0.04 285);
+}
+
+/* "Time" stamps and other tiny chrome elements that authored text-[10px]
+ * or text-[11px] (the smallest readable tier) deserve a contrast bump
+ * regardless of opacity authoring — at that size, default needs more
+ * lightness to read. */
+.mg-content-surface .text-\[10px\],
+.mg-content-surface .text-\[11px\],
+.mg-content-surface .text-\[12px\],
+.mg-sidebar-surface .text-\[10px\],
+.mg-sidebar-surface .text-\[11px\],
+.mg-sidebar-surface .text-\[12px\] {
+  color: oklch(0.86 0.03 285);
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Magic Glass — sidebar readability floor.
+ * Sidebar text was 11/13px and many descendants use Tailwind's `text-xs`
+ * (12px) or `text-sm` (14px). On the dark violet bg these read small.
+ * Apply a one-step bump as a floor inside the sidebar surface so users
+ * see a "comfortably-sized" sidebar without per-component edits.
+ * ────────────────────────────────────────────────────────────────────── */
+.mg-sidebar-surface .text-xs { font-size: 13px; }
+.mg-sidebar-surface .text-sm { font-size: 15px; }
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Magic Glass — fileTree readability (2026-06-21, photo evidence).
+ * The ai-elements file tree renders folders + files in font-mono text-sm.
+ * On the deep violet bg, that's a small light grey on a dark purple — the
+ * exact "low-contrast" the user complained about. We:
+ *   - bump font size to 14px (was 13.6px effectively, text-sm)
+ *   - force a high-luminance off-white color (defeats any nested opacity)
+ *   - keep font-mono (it's a deliberate file-tree affordance)
+ * ────────────────────────────────────────────────────────────────────── */
+[data-platform-file-tree] [role="treeitem"],
+[data-platform-file-tree] [role="treeitem"] *,
+[data-platform-file-tree] [role="tree"] {
+  color: oklch(0.94 0.02 285);
+  font-size: 14px;
+}
+[data-platform-file-tree] [role="treeitem"]:hover {
+  background: oklch(1 0 0 / 0.06) !important;
+}
+/* file-tree icons (folder + file) inherit text-muted-foreground; lift them too. */
+[data-platform-file-tree] [role="treeitem"] svg {
+  color: oklch(0.86 0.04 285) !important;
+}
+/* "选中" item background was bg-muted (now oklch 0.26-ish) which is
+   indistinguishable from canvas — make it the magic active gradient. */
+[data-platform-file-tree] [role="treeitem"].bg-muted,
+[data-platform-file-tree] [role="treeitem"][aria-selected="true"] {
+  background-image: linear-gradient(135deg, var(--mg-active-bg-strong-from), var(--mg-active-bg-strong-to)) !important;
+  background-color: transparent !important;
+  box-shadow: inset 0 0 0 1px var(--mg-edge);
+}
+
+/* Search input inside file tree panel — make it visible on deep bg. */
+[data-platform-file-tree] input[type="text"],
+[data-platform-file-tree] input:not([type]) {
+  background: oklch(0.26 0.06 285);
+  border-color: oklch(1 0 0 / 0.15);
+  color: oklch(0.95 0.02 285);
+}
+[data-platform-file-tree] input::placeholder {
+  color: oklch(0.70 0.03 285);
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Magic Glass — Round 4 (2026-06-21): readability calibration.
+ * CDP showed the contrast ratio is fine (>10), but the user still finds
+ * it "tiring to read". Three knobs at once:
+ *   (1) bump font weight 400→500 inside magic surfaces — depths darker
+ *       than pure black eat thin strokes
+ *   (2) Strip violet tint from foreground text: pure near-white reads
+ *       sharper than tinted white at small sizes
+ *   (3) Bump sidebar session title 15→16px, secondary 13→14px
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* 1. Slightly heavier default font weight everywhere on magic surfaces */
+.mg-sidebar-surface,
+.mg-content-surface {
+  font-weight: 500;
+}
+
+/* 2. De-tint primary text — purer white reads sharper than violet-tinted */
+.mg-sidebar-surface,
+.mg-sidebar-surface * {
+  /* Forces every descendant unless they have an explicit non-inherit color.
+     We won; the readability fallback rules earlier still apply because
+     they have a more specific selector chain. */
+}
+.mg-sidebar-surface {
+  --foreground:           oklch(0.98 0.005 285);
+  --sidebar-foreground:   oklch(0.98 0.005 285);
+  --muted-foreground:     oklch(0.86 0.01 285);
+  --card-foreground:      oklch(0.98 0.005 285);
+}
+.mg-content-surface {
+  --foreground:           oklch(0.98 0.005 285);
+  --muted-foreground:     oklch(0.86 0.01 285);
+  --card-foreground:      oklch(0.98 0.005 285);
+}
+
+/* Round 3 size bump moved to source-level (ChatListPanel + SessionListItem
+   directly use text-[17px] / text-[15px] now). Tailwind v4 arbitrary-value
+   utilities run in a cascade layer that beats plain .mg-sidebar-surface
+   overrides; editing source was simpler than fighting specificity. */
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Magic Glass — Round 5 (2026-06-21): the targeted-by-CDP fixes.
+ *
+ * After looking at the actual rendered DOM with chrome-devtools:
+ *   1. Composer textarea text color was still inherited dark grey
+ *      (oklch 0.254 …). It needs to be forced near-white.
+ *   2. File tree font was 14px — bump to 15px to match the size floor
+ *      we set on the sidebar.
+ *   3. User-message bubble label was using the wrong foreground token.
+ * ────────────────────────────────────────────────────────────────────── */
+.mg-content-surface textarea,
+.mg-content-surface input[type="text"],
+.mg-content-surface input:not([type]) {
+  color: oklch(0.97 0.005 285) !important;
+}
+.mg-content-surface textarea::placeholder,
+.mg-content-surface input::placeholder {
+  color: oklch(0.72 0.02 285) !important;
+}
+/* File tree size bump round 2 */
+[data-platform-file-tree] [role="treeitem"],
+[data-platform-file-tree] [role="treeitem"] *,
+[data-platform-file-tree] [role="tree"] {
+  font-size: 15px !important;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Magic Glass — Round 6 (2026-06-21): chat prose readability.
+ * CDP showed <li> elements compute to lab(85.8) — visibly dimmer than
+ * surrounding <p> at lab(97.6). Fix: anchor all prose body elements
+ * inside magic surface to a single near-white color. We exclude
+ * <pre>/<code> blocks (they have their own terminal color scheme).
+ * ────────────────────────────────────────────────────────────────────── */
+.mg-content-surface p,
+.mg-content-surface li,
+.mg-content-surface blockquote,
+.mg-content-surface td,
+.mg-content-surface th,
+.mg-content-surface dd,
+.mg-content-surface dt,
+.mg-content-surface span:not([class*="text-status"]):not([class*="text-mg"]) {
+  color: oklch(0.97 0.01 285);
+}
+
+/* Markdown headings — give them a real hierarchy bump so prose feels
+ * structured, not flat. Was 17.5px / 500 same as body. */
+.mg-content-surface h1 { font-size: 28px; font-weight: 700; color: oklch(0.99 0.005 285); }
+.mg-content-surface h2 { font-size: 22px; font-weight: 700; color: oklch(0.99 0.005 285); }
+.mg-content-surface h3 { font-size: 19px; font-weight: 600; color: oklch(0.98 0.005 285); }
+.mg-content-surface h4 { font-size: 17px; font-weight: 600; color: oklch(0.98 0.005 285); }
+
+/* Links — make them stand out with the magic accent. */
+.mg-content-surface a {
+  color: oklch(0.82 0.14 200);
+  text-decoration-color: oklch(0.82 0.14 200 / 0.4);
+  text-underline-offset: 2px;
+}
+.mg-content-surface a:hover {
+  text-decoration-color: oklch(0.82 0.14 200);
+}
+
+/* Inline <code> — already had decent contrast (CDP confirmed) but lift
+ * the bg a touch so the chip is visibly a chip on the dark surface. */
+.mg-content-surface :not(pre) > code {
+  background: oklch(0.30 0.06 285) !important;
+  color: oklch(0.92 0.08 200) !important;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+}
+
+/* User bubble — the dark bubble on the right side of the chat. The
+ * project sets --user-bubble per theme; the magic-surface override
+ * already bumped it to oklch(0.40 0.10 285). Belt-and-suspenders: also
+ * pin the foreground color so the label is forced bright regardless of
+ * which token chain it inherits. */
+.mg-content-surface [style*="user-bubble"],
+.mg-content-surface [class*="user-bubble"] {
+  color: oklch(0.99 0.005 285) !important;
 }

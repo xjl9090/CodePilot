@@ -1016,7 +1016,12 @@ export function MessageInput({
   return (
     <div className="bg-[var(--platform-surface-bar)] backdrop-blur-lg px-4 pt-2 pb-1">
       <div className="mx-auto w-full max-w-3xl">
-        <div className="relative">
+        {/* 2026-06-21 Magic Glass: the composer outer wrapper gains a
+            neon outer-glow when any descendant (textarea, actionbar
+            buttons) holds focus. See globals.css `.mg-focus-halo`. The
+            extra rounded-2xl matches the textarea's own radius so the
+            halo wraps the composer card cleanly. */}
+        <div className="relative mg-focus-halo rounded-2xl">
           {/* Slash Command / File Popover */}
           <SlashCommandPopover
             popoverMode={popover.popoverMode}
